@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs'
-import { prisma } from '../server/db'
+import { getPrisma } from '../server/db'
+
+const prisma = getPrisma()
 
 const users = [
   {

@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { prisma } from './db'
+import { getPrisma } from './db'
 import { requireAuth, signSession } from './auth'
 
 const app = express()
@@ -37,6 +37,7 @@ app.post('/api/auth/login', async (req, res) => {
   const input = loginSchema.safeParse(req.body)
   if (!input.success) return res.status(400).json({ error: 'Dados invalidos.' })
 
+  const prisma = getPrisma()
   const user = await prisma.user.findUnique({ where: { email: input.data.email.toLowerCase() } })
   if (!user) return res.status(401).json({ error: 'Email ou senha invalidos.' })
 
@@ -52,6 +53,7 @@ app.get('/api/me', requireAuth, (req, res) => {
 })
 
 app.get('/api/bootstrap', requireAuth, async (_req, res) => {
+  const prisma = getPrisma()
   const [profiles, accounts, categories] = await Promise.all([
     prisma.profile.findMany({ orderBy: { createdAt: 'asc' } }),
     prisma.account.findMany({ orderBy: { createdAt: 'asc' } }),
@@ -62,6 +64,7 @@ app.get('/api/bootstrap', requireAuth, async (_req, res) => {
 })
 
 app.get('/api/transactions', requireAuth, async (req, res) => {
+  const prisma = getPrisma()
   const profileId = typeof req.query.profileId === 'string' ? req.query.profileId : undefined
   const transactions = await prisma.transaction.findMany({
     where: profileId ? { profileId } : undefined,
@@ -77,6 +80,7 @@ app.post('/api/transactions', requireAuth, async (req, res) => {
   const input = transactionSchema.safeParse(req.body)
   if (!input.success || !req.user) return res.status(400).json({ error: 'Lancamento invalido.' })
 
+  const prisma = getPrisma()
   const transaction = await prisma.transaction.create({
     data: {
       ...input.data,
@@ -90,11 +94,13 @@ app.post('/api/transactions', requireAuth, async (req, res) => {
 })
 
 app.delete('/api/transactions/:id', requireAuth, async (req, res) => {
+  const prisma = getPrisma()
   await prisma.transaction.delete({ where: { id: String(req.params.id) } })
   res.status(204).end()
 })
 
 app.get('/api/dashboard', requireAuth, async (req, res) => {
+  const prisma = getPrisma()
   const profileId = typeof req.query.profileId === 'string' ? req.query.profileId : undefined
   const transactions = await prisma.transaction.findMany({
     where: profileId ? { profileId } : undefined,
@@ -127,6 +133,7 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 })
 
 app.get('/api/projection', requireAuth, async (req, res) => {
+  const prisma = getPrisma()
   const profileId = typeof req.query.profileId === 'string' ? req.query.profileId : undefined
   const months = Number(req.query.months || 6)
   const transactions = await prisma.transaction.findMany({
