@@ -17,6 +17,6 @@ export default async function handler(req: Request & VercelRequest, res: Respons
     return res.status(200).json({ ok: true, name: 'Do Fracasso a Prosperidade' })
   }
 
-  const { default: app } = await import('../server/app')
+  const { default: app } = await import('../server/app.js')
   return app(req, res)
 }

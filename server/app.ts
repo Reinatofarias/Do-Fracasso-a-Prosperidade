@@ -2,8 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { getPrisma } from './db'
-import { requireAuth, signSession } from './auth'
+import { getPrisma } from './db.js'
+import { requireAuth, signSession, type AuthUser } from './auth.js'
 
 const app = express()
 
@@ -48,8 +48,8 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token: signSession(sessionUser), user: sessionUser })
 })
 
-app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ user: req.user })
+app.get('/api/me', requireAuth, (_req, res) => {
+  res.json({ user: res.locals.user })
 })
 
 app.get('/api/bootstrap', requireAuth, async (_req, res) => {
@@ -78,13 +78,14 @@ app.get('/api/transactions', requireAuth, async (req, res) => {
 
 app.post('/api/transactions', requireAuth, async (req, res) => {
   const input = transactionSchema.safeParse(req.body)
-  if (!input.success || !req.user) return res.status(400).json({ error: 'Lancamento invalido.' })
+  const authUser = res.locals.user as AuthUser | undefined
+  if (!input.success || !authUser) return res.status(400).json({ error: 'Lancamento invalido.' })
 
   const prisma = getPrisma()
   const transaction = await prisma.transaction.create({
     data: {
       ...input.data,
-      userId: req.user.id,
+      userId: authUser.id,
       amount: input.data.amount,
     },
     include: { account: true, category: true, user: { select: { name: true } } },

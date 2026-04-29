@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs'
-import { getPrisma } from '../server/db'
+import { getPrisma } from '../server/db.js'
 
 const prisma = getPrisma()
 

@@ -12,12 +12,6 @@ export type AuthUser = {
   role: UserRole
 }
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: AuthUser
-  }
-}
-
 export function signSession(user: AuthUser) {
   return jwt.sign(user, jwtSecret(), { expiresIn: '7d' })
 }
@@ -31,7 +25,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 
   try {
-    req.user = jwt.verify(token, jwtSecret()) as AuthUser
+    res.locals.user = jwt.verify(token, jwtSecret()) as AuthUser
     return next()
   } catch {
     return res.status(401).json({ error: 'Sessao expirada ou invalida.' })
