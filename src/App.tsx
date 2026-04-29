@@ -275,6 +275,7 @@ function App() {
     dueDate: new Date().toISOString().slice(0, 10),
     recurring: true,
   })
+  const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
   const filteredTransactions = useMemo(
     () => transactions.filter((item) => item.profileId === activeProfile),
@@ -286,6 +287,51 @@ function App() {
 
   useEffect(() => {
     if (!session?.token) return
+
+    let cancelled = false
+    const token = session.token
+
+    async function validateSession() {
+      if (token === 'demo') {
+        if (demoLoginEnabled) {
+          if (!cancelled) {
+            setDemoMode(true)
+            setSessionChecked(true)
+          }
+          return
+        }
+
+        localStorage.removeItem('prosperidade.session')
+        if (!cancelled) {
+          setSession(null)
+          setDemoMode(false)
+          setSessionChecked(true)
+        }
+        return
+      }
+
+      try {
+        await api<{ user: Session['user'] }>('/api/me', token)
+        if (!cancelled) setSessionChecked(true)
+      } catch {
+        localStorage.removeItem('prosperidade.session')
+        if (!cancelled) {
+          setSession(null)
+          setDemoMode(false)
+          setSessionChecked(true)
+        }
+      }
+    }
+
+    validateSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [session?.token])
+
+  useEffect(() => {
+    if (!session?.token || !sessionChecked || session.token === 'demo') return
 
     Promise.all([
       api<{ profiles: Profile[]; accounts: Account[]; categories: Category[] }>('/api/bootstrap', session.token),
@@ -302,7 +348,7 @@ function App() {
       .catch(() => {
         setDemoMode(true)
       })
-  }, [activeProfile, session?.token])
+  }, [activeProfile, session?.token, sessionChecked])
 
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault()
@@ -401,6 +447,22 @@ function App() {
   function logout() {
     localStorage.removeItem('prosperidade.session')
     setSession(null)
+    setDemoMode(false)
+  }
+
+  if (!sessionChecked) {
+    return (
+      <main className="login-shell">
+        <section className="login-hero">
+          <div className="brand-mark">
+            <Sparkles size={28} />
+          </div>
+          <p className="eyebrow">Sistema financeiro familiar e empresarial</p>
+          <h1>Do Fracasso a Prosperidade</h1>
+          <h2>Validando sessão...</h2>
+        </section>
+      </main>
+    )
   }
 
   if (!session) {
