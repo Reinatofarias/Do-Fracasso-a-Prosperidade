@@ -37,18 +37,24 @@ app.get('/api/db-check', async (_req, res) => {
   try {
     const prisma = getPrisma()
     const users = await prisma.user.count()
-    const databaseUrl = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null
+    const databaseSource = process.env.RUNTIME_DATABASE_URL ? 'RUNTIME_DATABASE_URL' : 'DATABASE_URL'
+    const rawDatabaseUrl = process.env.RUNTIME_DATABASE_URL || process.env.DATABASE_URL
+    const databaseUrl = rawDatabaseUrl ? new URL(rawDatabaseUrl) : null
     res.json({
       ok: true,
       users,
+      databaseSource,
       databaseHost: databaseUrl?.hostname ?? null,
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     })
   } catch (error) {
-    const databaseHost = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).hostname : null
+    const databaseSource = process.env.RUNTIME_DATABASE_URL ? 'RUNTIME_DATABASE_URL' : 'DATABASE_URL'
+    const rawDatabaseUrl = process.env.RUNTIME_DATABASE_URL || process.env.DATABASE_URL
+    const databaseHost = rawDatabaseUrl ? new URL(rawDatabaseUrl).hostname : null
     console.error('db-check failed', error)
     res.status(500).json({
       ok: false,
+      databaseSource,
       databaseHost,
       commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
       error: error instanceof Error ? error.message : 'Erro desconhecido ao conectar no banco.',
