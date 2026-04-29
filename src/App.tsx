@@ -175,6 +175,8 @@ const demoTransactions: Transaction[] = [
   },
 ]
 
+const demoLoginEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true'
+
 async function api<T>(path: string, token?: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...options,
@@ -316,10 +318,12 @@ function App() {
       setDemoMode(false)
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Não foi possível entrar.')
-      setDemoMode(true)
-      const demoSession = { token: 'demo', user: { name: 'Modo demonstração', email: login.email, role: 'OWNER' } }
-      localStorage.setItem('prosperidade.session', JSON.stringify(demoSession))
-      setSession(demoSession)
+      if (demoLoginEnabled) {
+        setDemoMode(true)
+        const demoSession = { token: 'demo', user: { name: 'Modo demonstração', email: login.email, role: 'OWNER' } }
+        localStorage.setItem('prosperidade.session', JSON.stringify(demoSession))
+        setSession(demoSession)
+      }
     }
   }
 
@@ -432,7 +436,7 @@ function App() {
               onChange={(event) => setLogin({ ...login, password: event.target.value })}
             />
           </label>
-          {loginError ? <span className="form-error">{loginError} Entrando em demonstração.</span> : null}
+          {loginError ? <span className="form-error">{loginError}</span> : null}
           <button type="submit">
             Entrar
             <ArrowUpRight size={18} />
