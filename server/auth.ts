@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import type { Request, Response, NextFunction } from 'express'
-import type { UserRole } from '../src/generated/prisma/enums'
+
+type UserRole = 'OWNER' | 'SPOUSE'
 
 const jwtSecret = () => process.env.JWT_SECRET || 'dev-only-change-this-secret'
 
