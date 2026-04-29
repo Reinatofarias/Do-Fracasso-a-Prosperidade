@@ -33,19 +33,40 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, name: 'Do Fracasso a Prosperidade' })
 })
 
+app.get('/api/db-check', async (_req, res) => {
+  try {
+    const prisma = getPrisma()
+    const users = await prisma.user.count()
+    res.json({ ok: true, users })
+  } catch (error) {
+    console.error('db-check failed', error)
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Erro desconhecido ao conectar no banco.',
+    })
+  }
+})
+
 app.post('/api/auth/login', async (req, res) => {
-  const input = loginSchema.safeParse(req.body)
-  if (!input.success) return res.status(400).json({ error: 'Dados invalidos.' })
+  try {
+    const input = loginSchema.safeParse(req.body)
+    if (!input.success) return res.status(400).json({ error: 'Dados invalidos.' })
 
-  const prisma = getPrisma()
-  const user = await prisma.user.findUnique({ where: { email: input.data.email.toLowerCase() } })
-  if (!user) return res.status(401).json({ error: 'Email ou senha invalidos.' })
+    const prisma = getPrisma()
+    const user = await prisma.user.findUnique({ where: { email: input.data.email.toLowerCase() } })
+    if (!user) return res.status(401).json({ error: 'Email ou senha invalidos.' })
 
-  const valid = await bcrypt.compare(input.data.password, user.passwordHash)
-  if (!valid) return res.status(401).json({ error: 'Email ou senha invalidos.' })
+    const valid = await bcrypt.compare(input.data.password, user.passwordHash)
+    if (!valid) return res.status(401).json({ error: 'Email ou senha invalidos.' })
 
-  const sessionUser = { id: user.id, email: user.email, name: user.name, role: user.role }
-  res.json({ token: signSession(sessionUser), user: sessionUser })
+    const sessionUser = { id: user.id, email: user.email, name: user.name, role: user.role }
+    res.json({ token: signSession(sessionUser), user: sessionUser })
+  } catch (error) {
+    console.error('login failed', error)
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Erro inesperado no login.',
+    })
+  }
 })
 
 app.get('/api/me', requireAuth, (_req, res) => {
