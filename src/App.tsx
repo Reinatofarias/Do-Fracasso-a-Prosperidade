@@ -48,7 +48,7 @@ import {
   type Transaction,
   type TransactionInput,
 } from './services/transactionService'
-import { createNarrative, generateFinancialInsights, wouldCreateNegativeBalance } from './services/financialInsightsService'
+import { generateFinancialInsights, wouldCreateNegativeBalance } from './services/financialInsightsService'
 import { getFinancialPlan, type FinancialPlan } from './services/planningService'
 import './App.css'
 
@@ -228,7 +228,6 @@ function App() {
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
   const [activeNavigation, setActiveNavigation] = useState('dashboard')
-  const [guidedMessage, setGuidedMessage] = useState('')
   const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
   const handleDemoMode = useCallback(() => setDemoMode(true), [])
@@ -279,7 +278,6 @@ function App() {
   const dashboard = useMemo(() => buildDashboard(transactions), [transactions])
   const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
   const financialPlan = useMemo(() => getFinancialPlan(transactions), [transactions])
-  const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
   const financialStatus = useMemo(() => getFinancialStatus(financialPlan, transactions.length), [financialPlan, transactions.length])
   const monthlyProgress = useMemo(() => getMonthlyProgress(transactions), [transactions])
   const suggestedAction = useMemo(() => getSuggestedAction(financialStatus.tone), [financialStatus.tone])
@@ -451,20 +449,6 @@ function App() {
     setCurrentAccount(nextAccount)
     if (nextAccount.profileId) setActiveProfile(nextAccount.profileId)
     setToast(`Você está em ${nextAccount.name}.`)
-  }
-
-  function handleGuidedAction(kind: 'save' | 'debt' | 'business') {
-    const messages = {
-      save:
-        accountKind === 'business'
-          ? 'Revise os gastos fixos da empresa e registre as entradas do mês para enxergar o caixa com clareza.'
-          : 'Comece escolhendo um gasto pequeno para reduzir esta semana e registre tudo que entrar e sair.',
-      debt:
-        'Liste primeiro os pagamentos mais urgentes. Depois acompanhe cada saída para evitar novas parcelas sem necessidade.',
-      business:
-        'Use o contexto da empresa para separar caixa, entradas e despesas operacionais sem misturar com a família.',
-    }
-    setGuidedMessage(messages[kind])
   }
 
   function handleCreateProfile(event: React.FormEvent) {
@@ -647,9 +631,7 @@ function App() {
 
         <FinancialStatusHero
           dashboard={dashboard}
-          narrative={narrative}
           status={financialStatus}
-          accountType={accountKind}
           suggestedAction={suggestedAction}
           onAddMovement={openCreateTransaction}
         />
@@ -679,9 +661,10 @@ function App() {
             tone="gold"
             description={
               accountKind === 'business'
-                ? `Caixa atual: ${currency.format(dashboard.balance)}`
+                ? `Você tem ${currency.format(dashboard.balance)} guardados`
                 : `Você tem ${currency.format(dashboard.balance)} guardados`
             }
+            emphasis="asset"
           />
         </section>
 
@@ -691,11 +674,6 @@ function App() {
             <span>{monthlyProgress.message}</span>
           </section>
         ) : null}
-
-        <section className={`suggested-action ${financialStatus.tone}`}>
-          <Target size={18} />
-          <span>{suggestedAction}</span>
-        </section>
 
         <section className="insights">
           {insights.map((insight) => (
@@ -708,24 +686,6 @@ function App() {
             </article>
           ))}
         </section>
-
-        <section className="guided-actions" aria-label="Ações guiadas">
-          <button type="button" onClick={() => handleGuidedAction('save')}>
-            Quero economizar
-          </button>
-          <button type="button" onClick={() => handleGuidedAction('debt')}>
-            Quero sair das dívidas
-          </button>
-          <button type="button" onClick={() => handleGuidedAction('business')}>
-            Quero organizar empresa
-          </button>
-        </section>
-        {guidedMessage ? (
-          <section className="guided-message">
-            <Sparkles size={18} />
-            <span>{guidedMessage}</span>
-          </section>
-        ) : null}
 
         <section className="actions-row">
           <button className="secondary" type="button" onClick={openProjection}>
@@ -806,7 +766,6 @@ function App() {
               <WalletCards size={28} />
               <strong>Vamos começar simples.</strong>
               <span>Adicione um ganho ou gasto. O sistema organiza o resto pra você.</span>
-              <PrimaryActionButton onClick={openCreateTransaction} />
             </section>
           ) : null}
           {!loading && transactions.length ? (
@@ -1096,30 +1055,15 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
 
 function FinancialStatusHero({
   dashboard,
-  narrative,
   status,
-  accountType,
   suggestedAction,
   onAddMovement,
 }: {
   dashboard: Dashboard
-  narrative: string
   status: FinancialStatus
-  accountType: 'personal' | 'business'
   suggestedAction: string
   onAddMovement: () => void
 }) {
-  const emotionalMessage =
-    status.tone === 'positive'
-      ? accountType === 'business'
-        ? 'A empresa está com fluxo positivo.'
-        : 'Você está economizando bem este mês.'
-      : status.tone === 'negative'
-        ? accountType === 'business'
-          ? 'A empresa está gastando mais do que entra.'
-          : 'Atenção aos gastos da família neste mês.'
-        : 'Registre os próximos movimentos para enxergar melhor o mês.'
-
   return (
     <section className={`financial-hero ${status.tone}`}>
       <div className="status-copy">
@@ -1133,9 +1077,7 @@ function FinancialStatusHero({
           <span>Gastou <strong>{currency.format(dashboard.expense)}</strong></span>
           <span>Sobrou <strong>{currency.format(dashboard.result)}</strong></span>
         </div>
-        <p className="emotional-feedback">{emotionalMessage}</p>
         <p className="hero-next-step">👉 {suggestedAction}</p>
-        <span className="status-narrative">{narrative}</span>
       </div>
       <div className="hero-money">
         <span>Sobrou no mês</span>
@@ -1171,6 +1113,7 @@ function Metric({
   icon,
   tone,
   description,
+  emphasis,
   featured = false,
 }: {
   title: string
@@ -1178,10 +1121,11 @@ function Metric({
   icon: React.ReactNode
   tone: 'gold' | 'green' | 'red'
   description?: string
+  emphasis?: 'asset'
   featured?: boolean
 }) {
   return (
-    <article className={`metric ${tone}${featured ? ' featured' : ''}`}>
+    <article className={`metric ${tone}${featured ? ' featured' : ''}${emphasis ? ` ${emphasis}` : ''}`}>
       <span>{icon}</span>
       <p>{title}</p>
       <strong>{currency.format(value)}</strong>

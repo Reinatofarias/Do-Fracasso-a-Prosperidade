@@ -186,8 +186,7 @@ select:hover {
 }
 
 button[type="submit"],
-.primary-action,
-.empty-state button {
+.primary-action {
   min-height: 54px;
   display: inline-flex;
   align-items: center;
@@ -202,15 +201,13 @@ button[type="submit"],
 }
 
 button[type="submit"]:hover,
-.primary-action:hover,
-.empty-state button:hover {
+.primary-action:hover {
   background: linear-gradient(135deg, #0da85f, #36dd82);
   box-shadow: 0 18px 34px rgba(5, 47, 26, 0.28);
 }
 
 button[type="submit"]:active,
-.primary-action:active,
-.empty-state button:active {
+.primary-action:active {
   transform: translateY(0) scale(0.99);
   box-shadow: 0 8px 18px rgba(5, 47, 26, 0.2);
 }
@@ -489,12 +486,6 @@ nav button:hover,
   line-height: 1.45;
 }
 
-.financial-hero .emotional-feedback {
-  max-width: 640px;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 850;
-}
-
 .hero-breakdown {
   display: flex;
   flex-wrap: wrap;
@@ -525,18 +516,6 @@ nav button:hover,
 .warning p,
 .neutral p {
   color: rgba(242, 247, 244, 0.72);
-}
-
-.status-narrative {
-  max-width: 780px;
-  color: rgba(255, 255, 255, 0.72);
-  font-weight: 720;
-  line-height: 1.5;
-}
-
-.warning .status-narrative,
-.neutral .status-narrative {
-  color: rgba(242, 247, 244, 0.62);
 }
 
 .hero-money {
@@ -572,13 +551,13 @@ nav button:hover,
 
 .metrics {
   display: grid;
-  grid-template-columns: minmax(340px, 1.45fr) repeat(3, minmax(180px, 0.8fr));
+  grid-template-columns: minmax(360px, 1.55fr) repeat(2, minmax(170px, 0.72fr)) minmax(220px, 0.95fr);
   gap: 16px;
   margin-bottom: 22px;
 }
 
 .metric {
-  min-height: 158px;
+  min-height: 146px;
   display: grid;
   align-content: space-between;
   padding: 18px;
@@ -590,6 +569,10 @@ nav button:hover,
     border-color 160ms ease,
     transform 160ms ease,
     box-shadow 160ms ease;
+}
+
+.metric:not(.featured):not(.asset) {
+  opacity: 0.86;
 }
 
 .metric:hover {
@@ -611,6 +594,12 @@ nav button:hover,
 
 .metric.featured p {
   color: rgba(255, 255, 255, 0.76);
+}
+
+.metric.asset {
+  background: linear-gradient(180deg, rgba(243, 201, 95, 0.12), var(--surface));
+  border-color: rgba(243, 201, 95, 0.34);
+  box-shadow: 0 14px 34px rgba(243, 201, 95, 0.08);
 }
 
 .metric span {
@@ -657,13 +646,16 @@ nav button:hover,
   line-height: 1.35;
 }
 
+.metric.asset small {
+  color: #f7dfa0;
+}
+
 .metric.featured strong {
   font-size: clamp(2.55rem, 5vw, 4.7rem);
   line-height: 0.96;
 }
 
-.progress-callout,
-.suggested-action {
+.progress-callout {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -675,25 +667,16 @@ nav button:hover,
   font-weight: 850;
 }
 
-.progress-callout.positive,
-.suggested-action.positive {
+.progress-callout.positive {
   color: var(--brand-strong);
   background: var(--green-soft);
   border-color: rgba(40, 199, 111, 0.28);
 }
 
-.progress-callout.negative,
-.suggested-action.negative {
+.progress-callout.negative {
   color: var(--red);
   background: var(--red-soft);
   border-color: rgba(255, 92, 92, 0.28);
-}
-
-.suggested-action.warning,
-.suggested-action.neutral {
-  color: var(--gold);
-  background: var(--gold-soft);
-  border-color: rgba(243, 201, 95, 0.28);
 }
 
 .insights {
@@ -745,43 +728,6 @@ nav button:hover,
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.4;
-}
-
-.guided-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0 0 12px;
-}
-
-.guided-actions button {
-  min-height: 42px;
-  color: var(--text);
-  background: #0f1512;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 13px;
-  font-weight: 900;
-}
-
-.guided-actions button:hover {
-  color: var(--brand-strong);
-  background: var(--green-soft);
-  border-color: rgba(40, 199, 111, 0.28);
-}
-
-.guided-message {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0 0 18px;
-  padding: 13px 14px;
-  color: var(--brand-strong);
-  background: var(--green-soft);
-  border: 1px solid rgba(40, 199, 111, 0.28);
-  border-radius: 8px;
-  line-height: 1.45;
-  animation: toast-in 220ms ease both;
 }
 
 .actions-row {
