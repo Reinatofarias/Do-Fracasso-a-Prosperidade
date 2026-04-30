@@ -1062,7 +1062,7 @@ nav button:hover,
 
 .movement-type {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1094,6 +1094,16 @@ nav button:hover,
   color: #ffe0e0;
   background: rgba(255, 92, 92, 0.18);
   border-color: rgba(255, 92, 92, 0.48);
+}
+
+.movement-type button.active.save {
+  color: #fff2bf;
+  background: rgba(243, 201, 95, 0.18);
+  border-color: rgba(243, 201, 95, 0.48);
+}
+
+.profile-form .movement-type {
+  grid-template-columns: 1fr 1fr;
 }
 
 .smart-help {

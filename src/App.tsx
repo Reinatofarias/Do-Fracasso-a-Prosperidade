@@ -24,6 +24,7 @@ import {
   Landmark,
   LogOut,
   Plus,
+  PiggyBank,
   Sparkles,
   Target,
   Trash2,
@@ -72,6 +73,8 @@ type LocalProfile = {
   name: string
   type: 'personal' | 'business'
 }
+
+type TransactionTypeChoice = 'INCOME' | 'EXPENSE' | 'SAVE'
 
 const currency = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -228,7 +231,7 @@ function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [projection, setProjection] = useState<Projection | null>(null)
   const [form, setForm] = useState<TransactionInput>({ description: '', amount: '', dueDate: todayIso() })
-  const [transactionType, setTransactionType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE')
+  const [transactionType, setTransactionType] = useState<TransactionTypeChoice>('EXPENSE')
   const [formError, setFormError] = useState('')
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
@@ -391,7 +394,7 @@ function App() {
 
   function openEditTransaction(transaction: Transaction) {
     setEditingTransaction(transaction)
-    setTransactionType(transaction.type)
+    setTransactionType(transaction.description.toLowerCase().includes('guard') && transaction.type === 'INCOME' ? 'SAVE' : transaction.type)
     setForm({
       description: transaction.description,
       amount: formatCurrencyInput(transaction.amount),
@@ -408,8 +411,10 @@ function App() {
 
     const parsedAmount = parseCurrencyInput(form.amount)
     const signedAmount = transactionType === 'EXPENSE' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount)
+    const description =
+      transactionType === 'SAVE' && !form.description.trim() ? 'Guardado' : form.description
     const result = await saveTransaction(
-      { ...form, amount: Number.isFinite(parsedAmount) ? signedAmount.toFixed(2) : form.amount },
+      { ...form, description, amount: Number.isFinite(parsedAmount) ? signedAmount.toFixed(2) : form.amount },
       { editingId: editingTransaction?.id, allowDuplicate, accountId: resolvedAccount?.accountId },
     )
     if (!result.ok) {
@@ -916,6 +921,20 @@ function App() {
                 Entrada
               </button>
               <button
+                className={transactionType === 'SAVE' ? 'active save' : 'save'}
+                type="button"
+                onClick={() => {
+                  setTransactionType('SAVE')
+                  setForm((current) => ({
+                    ...current,
+                    description: current.description.trim() ? current.description : 'Guardado',
+                  }))
+                }}
+              >
+                <PiggyBank size={18} />
+                Guardar
+              </button>
+              <button
                 className={transactionType === 'EXPENSE' ? 'active expense' : 'expense'}
                 type="button"
                 onClick={() => setTransactionType('EXPENSE')}
@@ -980,7 +999,7 @@ function App() {
               ) : null}
               <button type="submit">
                 <CheckCircle2 size={18} />
-                Salvar
+                {transactionType === 'SAVE' ? 'Guardar' : 'Salvar'}
               </button>
             </div>
           </form>
