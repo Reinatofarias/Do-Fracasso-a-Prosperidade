@@ -759,7 +759,9 @@ function App() {
                 </BarChart>
               </ResponsiveContainer>
             ) : null}
-            {!loading && !transactions.length ? <EmptyChartState onAddMovement={openCreateTransaction} /> : null}
+            {!loading && !transactions.length ? (
+              <EmptyChartState message="Adicione movimentos para visualizar como seu dinheiro entra e sai." />
+            ) : null}
           </div>
 
           <div className="panel chart-panel">
@@ -785,7 +787,7 @@ function App() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyChartState onAddMovement={openCreateTransaction} />
+              <EmptyChartState message="Seus gastos aparecerão aqui organizados por categoria." />
             )}
           </div>
         </section>
@@ -1197,16 +1199,11 @@ function LoadingState() {
   )
 }
 
-function EmptyChartState({ onAddMovement }: { onAddMovement: () => void }) {
+function EmptyChartState({ message }: { message: string }) {
   return (
     <section className="state empty-mini">
       <WalletCards size={24} />
-      <strong>Comece simples.</strong>
-      <span>Adicione um ganho ou gasto e o sistema calcula o resto pra você.</span>
-      <button className="mini-action" type="button" onClick={onAddMovement}>
-        <Plus size={16} />
-        Adicionar
-      </button>
+      <span>{message}</span>
     </section>
   )
 }
