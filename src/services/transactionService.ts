@@ -248,15 +248,18 @@ export function normalizeTransactionInput(
   profileId: string,
   accounts: Account[],
   categories: Category[],
+  preferredAccountId?: string | null,
 ): NormalizedTransactionInput {
   const description = input.description.trim()
   const amount = parseCurrencyInput(input.amount)
-  const accountId = accounts.find((item) => item.profileId === profileId)?.id || ''
+  const preferredAccount = accounts.find((item) => item.id === preferredAccountId)
+  const accountId = preferredAccount?.id || accounts.find((item) => item.profileId === profileId)?.id || ''
+  const resolvedProfileId = preferredAccount?.profileId || profileId
   const type = amount >= 0 ? 'INCOME' : 'EXPENSE'
-  const category = suggestCategory(description, amount, categories.filter((item) => item.profileId === profileId))
+  const category = suggestCategory(description, amount, categories.filter((item) => item.profileId === resolvedProfileId))
 
   return {
-    profileId,
+    profileId: resolvedProfileId,
     accountId,
     categoryId: category?.id || null,
     type,

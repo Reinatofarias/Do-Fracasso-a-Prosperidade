@@ -37,9 +37,11 @@ import {
 import { useTransactions } from './hooks/useTransactions'
 import {
   api,
+  buildDashboard,
   parseCurrencyInput,
   suggestCategory,
   todayIso,
+  type Account,
   type Dashboard,
   type Projection,
   type Profile,
@@ -53,6 +55,16 @@ import './App.css'
 type Session = {
   token: string
   user: { name: string; email: string; role: string }
+}
+
+type CurrentAccount = {
+  id: string
+  name: string
+  type: 'all' | 'personal' | 'business' | 'new-business'
+  profileId?: string
+  accountId?: string
+  aggregate?: boolean
+  disabled?: boolean
 }
 
 const currency = new Intl.NumberFormat('pt-BR', {
@@ -70,6 +82,55 @@ function maskCurrencyInput(value: string) {
   return currency.format(Number(digits || '0') / 100)
 }
 
+function buildAccountContexts(profiles: Profile[], accounts: Account[]): CurrentAccount[] {
+  const personalProfile = profiles.find((profile) => profile.type === 'PERSONAL') || profiles[0]
+  const personalAccount = accounts.find((account) => account.profileId === personalProfile?.id)
+  const businessProfiles = profiles.filter((profile) => profile.type === 'BUSINESS')
+  const businessAccounts = accounts.filter((account) =>
+    businessProfiles.some((profile) => profile.id === account.profileId),
+  )
+  const businessLabels = ['Empresa A', 'Empresa B']
+
+  const contexts: CurrentAccount[] = [
+    {
+      id: 'all',
+      name: 'Todas as contas',
+      type: 'all',
+      aggregate: true,
+    },
+    {
+      id: 'personal',
+      name: 'Pessoal',
+      type: 'personal',
+      profileId: personalProfile?.id,
+      accountId: personalAccount?.id,
+      disabled: !personalProfile || !personalAccount,
+    },
+  ]
+
+  businessLabels.forEach((label, index) => {
+    const account = businessAccounts[index]
+    const profile = account ? profiles.find((item) => item.id === account.profileId) : businessProfiles[index]
+    contexts.push({
+      id: `business-${index + 1}`,
+      name: label,
+      type: 'business',
+      profileId: profile?.id,
+      accountId: account?.id,
+      disabled: !profile || !account,
+    })
+  })
+
+  contexts.push({
+    id: 'new-business',
+    name: '* Nova empresa',
+    type: 'new-business',
+    disabled: true,
+  })
+
+  return contexts
+}
+
 const demoLoginEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true'
 
 function App() {
@@ -81,6 +142,7 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [demoMode, setDemoMode] = useState(false)
   const [activeProfile, setActiveProfile] = useState('personal-default')
+  const [currentAccountId, setCurrentAccountId] = useState('personal')
   const [projectionOpen, setProjectionOpen] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -99,9 +161,9 @@ function App() {
 
   const {
     profiles,
+    accounts,
     categories,
-    transactions,
-    dashboard,
+    transactions: loadedTransactions,
     loading,
     error,
     deletedTransaction,
@@ -115,10 +177,27 @@ function App() {
     userName: session?.user.name || 'Usuário',
     demoMode,
     activeProfile,
+    aggregateAccounts: currentAccountId === 'all',
     onDemoMode: handleDemoMode,
     onProfilesLoaded: handleProfilesLoaded,
   })
 
+  const accountContexts = useMemo(() => buildAccountContexts(profiles, accounts), [accounts, profiles])
+  const currentAccount = useMemo(
+    () =>
+      accountContexts.find((account) => account.id === currentAccountId && !account.disabled) ||
+      accountContexts.find((account) => account.id === 'personal' && !account.disabled) ||
+      accountContexts[0],
+    [accountContexts, currentAccountId],
+  )
+  const transactions = useMemo(
+    () =>
+      currentAccount?.aggregate || !currentAccount?.accountId
+        ? loadedTransactions
+        : loadedTransactions.filter((transaction) => transaction.accountId === currentAccount.accountId),
+    [currentAccount, loadedTransactions],
+  )
+  const dashboard = useMemo(() => buildDashboard(transactions), [transactions])
   const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
   const financialPlan = useMemo(() => getFinancialPlan(transactions), [transactions])
   const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
@@ -226,7 +305,7 @@ function App() {
     const signedAmount = transactionType === 'EXPENSE' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount)
     const result = await saveTransaction(
       { ...form, amount: Number.isFinite(parsedAmount) ? signedAmount.toFixed(2) : form.amount },
-      { editingId: editingTransaction?.id, allowDuplicate },
+      { editingId: editingTransaction?.id, allowDuplicate, accountId: currentAccount?.accountId },
     )
     if (!result.ok) {
       setFormError(result.error)
@@ -259,13 +338,27 @@ function App() {
 
   async function openProjection() {
     setProjectionOpen(true)
-    setProjection(await loadProjection())
+    setProjection(await loadProjection(currentAccount?.aggregate ? null : currentAccount?.accountId))
   }
 
   function logout() {
     localStorage.removeItem('prosperidade.session')
     setSession(null)
     setDemoMode(false)
+  }
+
+  function selectAccount(accountId: string) {
+    const nextAccount = accountContexts.find((account) => account.id === accountId)
+    if (!nextAccount || nextAccount.disabled) return
+
+    setCurrentAccountId(nextAccount.id)
+    if (nextAccount.profileId) setActiveProfile(nextAccount.profileId)
+  }
+
+  function selectProfile(profile: Profile) {
+    const nextAccount = accountContexts.find((account) => account.profileId === profile.id && !account.disabled)
+    setActiveProfile(profile.id)
+    if (nextAccount) setCurrentAccountId(nextAccount.id)
   }
 
   const normalizedAmount = parseCurrencyInput(form.amount)
@@ -357,7 +450,7 @@ function App() {
             <button
               key={profile.id}
               className={profile.id === activeProfile ? 'active' : ''}
-              onClick={() => setActiveProfile(profile.id)}
+              onClick={() => selectProfile(profile)}
               type="button"
             >
               {profile.type === 'PERSONAL' ? <UserRound size={18} /> : <Building2 size={18} />}
@@ -379,6 +472,16 @@ function App() {
             <h1>Dashboard financeiro</h1>
           </div>
           <div className="topbar-actions">
+            <label className="account-switcher">
+              <span>Conta</span>
+              <select value={currentAccount?.id || currentAccountId} onChange={(event) => selectAccount(event.target.value)}>
+                {accountContexts.map((account) => (
+                  <option key={account.id} value={account.id} disabled={account.disabled}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             {demoMode ? <span className="demo-pill">Demonstração</span> : null}
             <button className="ghost" type="button" onClick={logout}>
               <LogOut size={18} />

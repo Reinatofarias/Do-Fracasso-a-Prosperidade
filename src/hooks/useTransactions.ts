@@ -25,6 +25,7 @@ type UseTransactionsOptions = {
   userName: string
   demoMode: boolean
   activeProfile: string
+  aggregateAccounts?: boolean
   onDemoMode: () => void
   onProfilesLoaded: (profiles: Profile[]) => void
 }
@@ -32,6 +33,7 @@ type UseTransactionsOptions = {
 type SaveOptions = {
   editingId?: string | null
   allowDuplicate?: boolean
+  accountId?: string | null
 }
 
 export function useTransactions({
@@ -39,6 +41,7 @@ export function useTransactions({
   userName,
   demoMode,
   activeProfile,
+  aggregateAccounts = false,
   onDemoMode,
   onProfilesLoaded,
 }: UseTransactionsOptions) {
@@ -51,8 +54,8 @@ export function useTransactions({
   const [deletedTransaction, setDeletedTransaction] = useState<Transaction | null>(null)
 
   const filteredTransactions = useMemo(
-    () => transactions.filter((item) => item.profileId === activeProfile),
-    [activeProfile, transactions],
+    () => transactions.filter((item) => aggregateAccounts || item.profileId === activeProfile),
+    [activeProfile, aggregateAccounts, transactions],
   )
   const dashboard = useMemo(() => buildDashboard(filteredTransactions), [filteredTransactions])
 
@@ -68,7 +71,10 @@ export function useTransactions({
       try {
         const [bootstrap, transactionData] = await Promise.all([
           api<{ profiles: Profile[]; accounts: Account[]; categories: Category[] }>('/api/bootstrap', token),
-          api<{ transactions: Transaction[] }>(`/api/transactions?profileId=${activeProfile}`, token),
+          api<{ transactions: Transaction[] }>(
+            aggregateAccounts ? '/api/transactions' : `/api/transactions?profileId=${activeProfile}`,
+            token,
+          ),
         ])
         if (cancelled) return
         setProfiles(bootstrap.profiles)
@@ -90,16 +96,20 @@ export function useTransactions({
     return () => {
       cancelled = true
     }
-  }, [activeProfile, demoMode, onDemoMode, onProfilesLoaded, token])
+  }, [activeProfile, aggregateAccounts, demoMode, onDemoMode, onProfilesLoaded, token])
 
   async function saveTransaction(input: TransactionInput, options: SaveOptions = {}) {
     const validation = validateTransactionInput(input)
     if (validation) return { ok: false as const, error: validation }
 
-    const normalized = normalizeTransactionInput(input, activeProfile, accounts, categories)
+    const fallbackAccountId = options.accountId || accounts.find((item) => item.profileId === activeProfile)?.id || null
+    const normalized = normalizeTransactionInput(input, activeProfile, accounts, categories, fallbackAccountId)
     if (!normalized.accountId) return { ok: false as const, error: 'Crie ou selecione uma conta padrão antes de lançar.' }
 
-    const duplicate = findDuplicate(filteredTransactions, normalized, options.editingId)
+    const duplicatePool = options.accountId
+      ? filteredTransactions.filter((transaction) => transaction.accountId === options.accountId)
+      : filteredTransactions
+    const duplicate = findDuplicate(duplicatePool, normalized, options.editingId)
     if (duplicate && !options.allowDuplicate) {
       return {
         ok: false as const,
@@ -189,7 +199,9 @@ export function useTransactions({
     setTransactions((current) => [restored, ...current])
   }
 
-  async function loadProjection() {
+  async function loadProjection(accountId?: string | null) {
+    if (accountId) return buildProjection(filteredTransactions.filter((transaction) => transaction.accountId === accountId))
+
     if (token && token !== 'demo' && !demoMode) {
       try {
         return await api<Projection>(`/api/projection?profileId=${activeProfile}&months=6`, token)
