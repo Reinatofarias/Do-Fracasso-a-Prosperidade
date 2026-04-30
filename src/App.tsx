@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -14,76 +14,38 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   Building2,
   CalendarDays,
   CheckCircle2,
   CircleDollarSign,
+  Edit3,
   Landmark,
   LogOut,
   Plus,
   ShieldCheck,
   Sparkles,
   Target,
+  Trash2,
   TrendingUp,
   UserRound,
   WalletCards,
   X,
 } from 'lucide-react'
+import { useTransactions } from './hooks/useTransactions'
+import {
+  api,
+  suggestCategory,
+  todayIso,
+  type Projection,
+  type Profile,
+  type Transaction,
+  type TransactionInput,
+} from './services/transactionService'
+import { createNarrative, generateFinancialInsights, wouldCreateNegativeBalance } from './services/financialInsightsService'
 import './App.css'
-
-type Profile = {
-  id: string
-  name: string
-  type: 'PERSONAL' | 'BUSINESS'
-}
-
-type Account = {
-  id: string
-  profileId: string
-  name: string
-  type: string
-  openingBalance?: string | number
-}
-
-type Category = {
-  id: string
-  profileId: string
-  name: string
-  type: 'INCOME' | 'EXPENSE'
-  color: string
-}
-
-type Transaction = {
-  id: string
-  profileId: string
-  accountId: string
-  categoryId?: string | null
-  type: 'INCOME' | 'EXPENSE'
-  status: 'PENDING' | 'PAID'
-  description: string
-  amount: string | number
-  dueDate: string
-  recurring: boolean
-  category?: Category | null
-  account?: Account
-  user?: { name: string }
-}
-
-type Dashboard = {
-  balance: number
-  income: number
-  expense: number
-  result: number
-  byCategory: Array<{ name: string; value: number; color: string }>
-}
-
-type Projection = {
-  projection: Array<{ month: number; income: number; expense: number; balance: number; status: string }>
-  turnPointMonth: number | null
-  recommendation: string
-}
 
 type Session = {
   token: string
@@ -95,159 +57,7 @@ const currency = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 })
 
-const demoProfiles: Profile[] = [
-  { id: 'personal-default', name: 'Família', type: 'PERSONAL' },
-  { id: 'business-default', name: 'Empresa', type: 'BUSINESS' },
-]
-
-const demoAccounts: Account[] = [
-  { id: 'personal-account', profileId: 'personal-default', name: 'Conta principal', type: 'CHECKING' },
-  { id: 'business-account', profileId: 'business-default', name: 'Caixa empresarial', type: 'CHECKING' },
-]
-
-const demoCategories: Category[] = [
-  { id: 'income', profileId: 'personal-default', name: 'Receitas', type: 'INCOME', color: '#2f9e44' },
-  { id: 'housing', profileId: 'personal-default', name: 'Moradia', type: 'EXPENSE', color: '#d4af37' },
-  { id: 'food', profileId: 'personal-default', name: 'Alimentação', type: 'EXPENSE', color: '#52b788' },
-  { id: 'debt', profileId: 'personal-default', name: 'Dívidas', type: 'EXPENSE', color: '#ef4444' },
-]
-
-const demoTransactions: Transaction[] = [
-  {
-    id: '1',
-    profileId: 'personal-default',
-    accountId: 'personal-account',
-    categoryId: 'income',
-    type: 'INCOME',
-    status: 'PAID',
-    description: 'Salário',
-    amount: 5200,
-    dueDate: '2026-04-05',
-    recurring: true,
-    category: demoCategories[0],
-    account: demoAccounts[0],
-    user: { name: 'Usuário Principal' },
-  },
-  {
-    id: '2',
-    profileId: 'personal-default',
-    accountId: 'personal-account',
-    categoryId: 'housing',
-    type: 'EXPENSE',
-    status: 'PAID',
-    description: 'Aluguel',
-    amount: 1800,
-    dueDate: '2026-04-08',
-    recurring: true,
-    category: demoCategories[1],
-    account: demoAccounts[0],
-    user: { name: 'Usuário Principal' },
-  },
-  {
-    id: '3',
-    profileId: 'personal-default',
-    accountId: 'personal-account',
-    categoryId: 'food',
-    type: 'EXPENSE',
-    status: 'PENDING',
-    description: 'Mercado',
-    amount: 980,
-    dueDate: '2026-04-15',
-    recurring: true,
-    category: demoCategories[2],
-    account: demoAccounts[0],
-    user: { name: 'Esposa' },
-  },
-  {
-    id: '4',
-    profileId: 'personal-default',
-    accountId: 'personal-account',
-    categoryId: 'debt',
-    type: 'EXPENSE',
-    status: 'PENDING',
-    description: 'Parcela de dívida',
-    amount: 1650,
-    dueDate: '2026-04-22',
-    recurring: true,
-    category: demoCategories[3],
-    account: demoAccounts[0],
-    user: { name: 'Usuário Principal' },
-  },
-]
-
 const demoLoginEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true'
-
-async function api<T>(path: string, token?: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  })
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: 'Erro inesperado.' }))
-    throw new Error(body.error || 'Erro inesperado.')
-  }
-
-  if (response.status === 204) return undefined as T
-  return response.json()
-}
-
-function buildDashboard(transactions: Transaction[]): Dashboard {
-  const income = transactions
-    .filter((item) => item.type === 'INCOME')
-    .reduce((sum, item) => sum + Number(item.amount), 0)
-  const expense = transactions
-    .filter((item) => item.type === 'EXPENSE')
-    .reduce((sum, item) => sum + Number(item.amount), 0)
-
-  const byCategory = Object.values(
-    transactions
-      .filter((item) => item.type === 'EXPENSE')
-      .reduce<Record<string, { name: string; value: number; color: string }>>((acc, item) => {
-        const name = item.category?.name || 'Sem categoria'
-        acc[name] ??= { name, value: 0, color: item.category?.color || '#d4af37' }
-        acc[name].value += Number(item.amount)
-        return acc
-      }, {}),
-  )
-
-  return { balance: income - expense, income, expense, result: income - expense, byCategory }
-}
-
-function buildProjection(transactions: Transaction[]): Projection {
-  const recurring = transactions.filter((item) => item.recurring)
-  const income = recurring
-    .filter((item) => item.type === 'INCOME')
-    .reduce((sum, item) => sum + Number(item.amount), 0)
-  const expense = recurring
-    .filter((item) => item.type === 'EXPENSE')
-    .reduce((sum, item) => sum + Number(item.amount), 0)
-
-  let running = 0
-  const projection = Array.from({ length: 6 }).map((_, index) => {
-    running += income - expense
-    return {
-      month: index + 1,
-      income,
-      expense,
-      balance: running,
-      status: running < 0 ? 'red' : income - expense < income * 0.1 ? 'yellow' : 'green',
-    }
-  })
-
-  return {
-    projection,
-    turnPointMonth: projection.find((item) => item.balance >= 0)?.month ?? null,
-    recommendation:
-      income - expense < 0
-        ? `Seu plano precisa virar ${currency.format(Math.abs(income - expense))} por mês para parar o déficit.`
-        : 'Seu fluxo recorrente está positivo. Priorize dívidas caras e construa reserva.',
-  }
-}
 
 function App() {
   const [session, setSession] = useState<Session | null>(() => {
@@ -257,33 +67,50 @@ function App() {
   const [login, setLogin] = useState({ email: 'voce@prosperidade.local', password: 'prosperidade123' })
   const [loginError, setLoginError] = useState('')
   const [demoMode, setDemoMode] = useState(false)
-  const [profiles, setProfiles] = useState<Profile[]>(demoProfiles)
-  const [accounts, setAccounts] = useState<Account[]>(demoAccounts)
-  const [categories, setCategories] = useState<Category[]>(demoCategories)
-  const [transactions, setTransactions] = useState<Transaction[]>(demoTransactions)
   const [activeProfile, setActiveProfile] = useState('personal-default')
   const [projectionOpen, setProjectionOpen] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
-  const [projection, setProjection] = useState<Projection>(() => buildProjection(demoTransactions))
-  const [form, setForm] = useState({
-    description: '',
-    amount: '',
-    type: 'EXPENSE',
-    status: 'PAID',
-    categoryId: '',
-    accountId: '',
-    dueDate: new Date().toISOString().slice(0, 10),
-    recurring: true,
-  })
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [projection, setProjection] = useState<Projection | null>(null)
+  const [form, setForm] = useState<TransactionInput>({ description: '', amount: '', dueDate: todayIso() })
+  const [formError, setFormError] = useState('')
+  const [duplicateWarning, setDuplicateWarning] = useState(false)
+  const [toast, setToast] = useState('')
   const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
-  const filteredTransactions = useMemo(
-    () => transactions.filter((item) => item.profileId === activeProfile),
-    [activeProfile, transactions],
+  const handleDemoMode = useCallback(() => setDemoMode(true), [])
+  const handleProfilesLoaded = useCallback((profiles: Profile[]) => {
+    setActiveProfile((current) => (profiles.some((item) => item.id === current) ? current : profiles[0]?.id || current))
+  }, [])
+
+  const {
+    profiles,
+    categories,
+    transactions,
+    dashboard,
+    loading,
+    error,
+    deletedTransaction,
+    emptyInput,
+    saveTransaction,
+    deleteTransaction,
+    undoDelete,
+    loadProjection,
+  } = useTransactions({
+    token: session?.token,
+    userName: session?.user.name || 'Usuário',
+    demoMode,
+    activeProfile,
+    onDemoMode: handleDemoMode,
+    onProfilesLoaded: handleProfilesLoaded,
+  })
+
+  const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
+  const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
+  const suggestions = useMemo(
+    () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
+    [transactions],
   )
-  const dashboard = useMemo(() => buildDashboard(filteredTransactions), [filteredTransactions])
-  const profileAccounts = accounts.filter((item) => item.profileId === activeProfile)
-  const profileCategories = categories.filter((item) => item.profileId === activeProfile)
 
   useEffect(() => {
     if (!session?.token) return
@@ -330,26 +157,6 @@ function App() {
     }
   }, [session?.token])
 
-  useEffect(() => {
-    if (!session?.token || !sessionChecked || session.token === 'demo') return
-
-    Promise.all([
-      api<{ profiles: Profile[]; accounts: Account[]; categories: Category[] }>('/api/bootstrap', session.token),
-      api<{ transactions: Transaction[] }>(`/api/transactions?profileId=${activeProfile}`, session.token),
-    ])
-      .then(([bootstrap, transactionData]) => {
-        setDemoMode(false)
-        setProfiles(bootstrap.profiles)
-        setAccounts(bootstrap.accounts)
-        setCategories(bootstrap.categories)
-        setTransactions(transactionData.transactions)
-        setActiveProfile((current) => bootstrap.profiles.some((item) => item.id === current) ? current : bootstrap.profiles[0]?.id)
-      })
-      .catch(() => {
-        setDemoMode(true)
-      })
-  }, [activeProfile, session?.token, sessionChecked])
-
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault()
     setLoginError('')
@@ -362,86 +169,74 @@ function App() {
       localStorage.setItem('prosperidade.session', JSON.stringify(data))
       setSession(data)
       setDemoMode(false)
-    } catch (error) {
-      setLoginError(error instanceof Error ? error.message : 'Não foi possível entrar.')
+    } catch (caught) {
+      setLoginError(caught instanceof Error ? caught.message : 'Não foi possível entrar.')
       if (demoLoginEnabled) {
-        setDemoMode(true)
         const demoSession = { token: 'demo', user: { name: 'Modo demonstração', email: login.email, role: 'OWNER' } }
         localStorage.setItem('prosperidade.session', JSON.stringify(demoSession))
         setSession(demoSession)
-      }
-    }
-  }
-
-  async function handleAddTransaction(event: React.FormEvent) {
-    event.preventDefault()
-    const accountId = form.accountId || profileAccounts[0]?.id || ''
-    const categoryId = form.categoryId || profileCategories.find((item) => item.type === form.type)?.id || ''
-    const selectedCategory = profileCategories.find((item) => item.id === categoryId)
-    const selectedAccount = profileAccounts.find((item) => item.id === accountId)
-    const payload = {
-      profileId: activeProfile,
-      accountId,
-      categoryId,
-      type: form.type as 'INCOME' | 'EXPENSE',
-      status: form.status as 'PENDING' | 'PAID',
-      description: form.description,
-      amount: Number(form.amount),
-      dueDate: form.dueDate,
-      recurring: form.recurring,
-    }
-
-    if (session?.token && !demoMode) {
-      try {
-        const data = await api<{ transaction: Transaction }>('/api/transactions', session.token, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })
-        setTransactions((current) => [data.transaction, ...current])
-      } catch {
         setDemoMode(true)
       }
     }
-
-    if (demoMode || session?.token === 'demo') {
-      setTransactions((current) => [
-        {
-          ...payload,
-          id: crypto.randomUUID(),
-          category: selectedCategory,
-          account: selectedAccount,
-          user: { name: session?.user.name || 'Usuário' },
-        },
-        ...current,
-      ])
-    }
-
-    setTransactionOpen(false)
-    setForm((current) => ({ ...current, description: '', amount: '' }))
   }
 
-  function openTransactionModal() {
-    setForm((current) => ({
-      ...current,
-      accountId: current.accountId || profileAccounts[0]?.id || '',
-      categoryId: current.categoryId || profileCategories.find((item) => item.type === current.type)?.id || '',
-    }))
+  function openCreateTransaction() {
+    setEditingTransaction(null)
+    setForm(emptyInput)
+    setFormError('')
+    setDuplicateWarning(false)
     setTransactionOpen(true)
+  }
+
+  function openEditTransaction(transaction: Transaction) {
+    setEditingTransaction(transaction)
+    setForm({
+      description: transaction.description,
+      amount: transaction.type === 'EXPENSE' ? `-${Number(transaction.amount)}` : String(transaction.amount),
+      dueDate: transaction.dueDate.slice(0, 10),
+    })
+    setFormError('')
+    setDuplicateWarning(false)
+    setTransactionOpen(true)
+  }
+
+  async function handleSaveTransaction(event: React.FormEvent, allowDuplicate = false) {
+    event.preventDefault()
+    setFormError('')
+
+    const result = await saveTransaction(form, { editingId: editingTransaction?.id, allowDuplicate })
+    if (!result.ok) {
+      setFormError(result.error)
+      setDuplicateWarning(Boolean(result.duplicate))
+      return
+    }
+
+    setToast(editingTransaction ? 'Movimento atualizado.' : 'Movimento adicionado.')
+    setTransactionOpen(false)
+    setEditingTransaction(null)
+    setForm(emptyInput)
+  }
+
+  async function handleDeleteTransaction(transaction: Transaction) {
+    const confirmed = window.confirm(`Excluir "${transaction.description}"? Você poderá desfazer logo em seguida.`)
+    if (!confirmed) return
+
+    const deleted = await deleteTransaction(transaction)
+    if (deleted) {
+      setTransactionOpen(false)
+      setEditingTransaction(null)
+      setToast('Lançamento removido')
+    }
+  }
+
+  async function handleUndoDelete() {
+    await undoDelete()
+    setToast('Exclusão desfeita.')
   }
 
   async function openProjection() {
     setProjectionOpen(true)
-    if (session?.token && !demoMode) {
-      try {
-        const data = await api<Projection>(`/api/projection?profileId=${activeProfile}&months=6`, session.token)
-        setProjection(data)
-        return
-      } catch {
-        setDemoMode(true)
-      }
-    }
-
-    setProjection(buildProjection(filteredTransactions))
+    setProjection(await loadProjection())
   }
 
   function logout() {
@@ -449,6 +244,19 @@ function App() {
     setSession(null)
     setDemoMode(false)
   }
+
+  const normalizedAmount = Number(form.amount.replace(',', '.'))
+  const possibleNegativeDate =
+    Number.isFinite(normalizedAmount) && normalizedAmount < 0
+      ? wouldCreateNegativeBalance(transactions, {
+          amount: Math.abs(normalizedAmount),
+          type: 'EXPENSE',
+          dueDate: form.dueDate || todayIso(),
+        })
+      : null
+  const selectedCategory = Number.isFinite(normalizedAmount)
+    ? suggestCategory(form.description, normalizedAmount, categories)
+    : null
 
   if (!sessionChecked) {
     return (
@@ -485,7 +293,7 @@ function App() {
         <form className="login-panel" onSubmit={handleLogin}>
           <ShieldCheck className="panel-icon" size={28} />
           <h3>Acesso restrito</h3>
-          <p>Dois usuários: você e sua esposa. No deploy, troque as senhas pelas variáveis da Vercel.</p>
+          <p>Entre para cuidar dos ganhos e gastos sem precisar conhecer termos financeiros.</p>
           <label>
             Email
             <input value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
@@ -544,7 +352,7 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Vivendo ao invés de sobreviver</p>
+            <p className="eyebrow">Visão simples do seu dinheiro</p>
             <h1>Dashboard financeiro</h1>
           </div>
           <div className="topbar-actions">
@@ -556,18 +364,45 @@ function App() {
           </div>
         </header>
 
+        <section className="hero-actions">
+          <div className="narrative">
+            <span>Resumo do mês</span>
+            <strong>{narrative}</strong>
+          </div>
+          <button className="primary-action" type="button" onClick={openCreateTransaction}>
+            <Plus size={20} />
+            Adicionar movimento
+          </button>
+        </section>
+
+        {error ? (
+          <section className="state error-state">
+            <AlertTriangle size={22} />
+            <strong>Não foi possível carregar tudo agora.</strong>
+            <span>{error}</span>
+          </section>
+        ) : null}
+
         <section className="metrics">
-          <Metric title="Saldo projetado" value={dashboard.balance} icon={<WalletCards size={22} />} tone="gold" />
-          <Metric title="Receitas" value={dashboard.income} icon={<ArrowUpRight size={22} />} tone="green" />
-          <Metric title="Despesas" value={dashboard.expense} icon={<ArrowDownLeft size={22} />} tone="red" />
-          <Metric title="Resultado" value={dashboard.result} icon={<TrendingUp size={22} />} tone="green" />
+          <Metric title="Saldo" value={dashboard.balance} icon={<WalletCards size={22} />} tone="gold" />
+          <Metric title="Entradas" value={dashboard.income} icon={<ArrowUpRight size={22} />} tone="green" />
+          <Metric title="Saídas" value={dashboard.expense} icon={<ArrowDownLeft size={22} />} tone="red" />
+          <Metric title="Sobrou" value={dashboard.result} icon={<TrendingUp size={22} />} tone={dashboard.result >= 0 ? 'green' : 'red'} />
+        </section>
+
+        <section className="insights">
+          {insights.map((insight) => (
+            <article key={insight.id} className={`insight ${insight.tone}`}>
+              <Sparkles size={18} />
+              <div>
+                <strong>{insight.title}</strong>
+                <span>{insight.message}</span>
+              </div>
+            </article>
+          ))}
         </section>
 
         <section className="actions-row">
-          <button type="button" onClick={openTransactionModal}>
-            <Plus size={18} />
-            Novo lançamento
-          </button>
           <button className="secondary" type="button" onClick={openProjection}>
             <Target size={18} />
             Projeção financeira
@@ -579,163 +414,195 @@ function App() {
             <div className="panel-heading">
               <div>
                 <span>Fluxo</span>
-                <h3>Receitas x despesas</h3>
+                <h3>Entradas x saídas</h3>
               </div>
               <CalendarDays size={20} />
             </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={[{ name: 'Atual', receitas: dashboard.income, despesas: dashboard.expense }]}>
-                <CartesianGrid stroke="#243127" vertical={false} />
-                <XAxis dataKey="name" stroke="#8fa99a" />
-                <YAxis stroke="#8fa99a" />
-                <Tooltip contentStyle={{ background: '#11170f', border: '1px solid #31402b' }} />
-                <Bar dataKey="receitas" fill="#2f9e44" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="despesas" fill="#d4af37" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? <LoadingState /> : null}
+            {!loading && transactions.length ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={[{ name: 'Atual', entradas: dashboard.income, saidas: dashboard.expense }]}>
+                  <CartesianGrid stroke="#d9e2dc" vertical={false} />
+                  <XAxis dataKey="name" stroke="#64748b" />
+                  <YAxis stroke="#64748b" />
+                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                  <Bar dataKey="entradas" fill="#2f9e44" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="saidas" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : null}
+            {!loading && !transactions.length ? <EmptyChartState /> : null}
           </div>
 
           <div className="panel chart-panel">
             <div className="panel-heading">
               <div>
                 <span>Categorias</span>
-                <h3>Onde o dinheiro está indo</h3>
+                <h3>Onde o dinheiro saiu</h3>
               </div>
               <CircleDollarSign size={20} />
             </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={dashboard.byCategory} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92}>
-                  {dashboard.byCategory.map((item) => (
-                    <Cell key={item.name} fill={item.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => currency.format(Number(value))} />
-              </PieChart>
-            </ResponsiveContainer>
+            {dashboard.byCategory.length ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={dashboard.byCategory} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92}>
+                    {dashboard.byCategory.map((item) => (
+                      <Cell key={item.name} fill={item.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyChartState />
+            )}
           </div>
         </section>
 
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <span>Últimos movimentos</span>
-              <h3>Lançamentos</h3>
+              <span>Toque em um item para editar</span>
+              <h3>Movimentos</h3>
             </div>
             <Landmark size={20} />
           </div>
-          <div className="transactions">
-            {filteredTransactions.map((item) => (
-              <article key={item.id} className="transaction">
-                <div className={`transaction-icon ${item.type.toLowerCase()}`}>
-                  {item.type === 'INCOME' ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
-                </div>
-                <div>
-                  <strong>{item.description}</strong>
-                  <span>{item.category?.name || 'Sem categoria'} · {item.account?.name || 'Conta'}</span>
-                </div>
-                <span className={item.status === 'PAID' ? 'status paid' : 'status pending'}>
-                  {item.status === 'PAID' ? 'Pago' : 'Pendente'}
-                </span>
-                <strong className={item.type === 'INCOME' ? 'money-positive' : 'money-negative'}>
-                  {item.type === 'INCOME' ? '+' : '-'} {currency.format(Number(item.amount))}
-                </strong>
-              </article>
-            ))}
-          </div>
+          {loading ? <LoadingState /> : null}
+          {!loading && !transactions.length ? (
+            <section className="empty-state">
+              <WalletCards size={28} />
+              <strong>Você ainda não adicionou nenhum movimento.</strong>
+              <span>Comece adicionando seu primeiro ganho ou gasto.</span>
+              <button type="button" onClick={openCreateTransaction}>
+                <Plus size={18} />
+                Adicionar movimento
+              </button>
+            </section>
+          ) : null}
+          {!loading && transactions.length ? (
+            <div className="transactions">
+              {transactions.map((item) => (
+                <button key={item.id} className="transaction" type="button" onClick={() => openEditTransaction(item)}>
+                  <div className={`transaction-icon ${item.type.toLowerCase()}`}>
+                    {item.type === 'INCOME' ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
+                  </div>
+                  <div>
+                    <strong>{item.description}</strong>
+                    <span>{item.category?.name || 'Categoria sugerida'} · {item.dueDate.slice(0, 10)}</span>
+                  </div>
+                  <span className="status paid">Pago</span>
+                  <strong className={item.type === 'INCOME' ? 'money-positive' : 'money-negative'}>
+                    {item.type === 'INCOME' ? '+' : '-'} {currency.format(Number(item.amount))}
+                  </strong>
+                  <Edit3 className="row-action" size={17} />
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
       </section>
 
+      <button className="fab" type="button" onClick={openCreateTransaction} aria-label="Adicionar movimento">
+        <Plus size={28} />
+      </button>
+
+      {toast ? (
+        <div className="toast" role="status">
+          <span>{toast}</span>
+          {deletedTransaction ? (
+            <button type="button" onClick={handleUndoDelete}>
+              Desfazer
+            </button>
+          ) : (
+            <button type="button" onClick={() => setToast('')}>
+              Fechar
+            </button>
+          )}
+        </div>
+      ) : null}
+
       {transactionOpen ? (
-        <Modal title="Novo lançamento" onClose={() => setTransactionOpen(false)}>
-          <form className="transaction-form" onSubmit={handleAddTransaction}>
+        <Modal title={editingTransaction ? 'Editar movimento' : 'Adicionar movimento'} onClose={() => setTransactionOpen(false)}>
+          <form className="transaction-form" onSubmit={handleSaveTransaction}>
             <label>
               Descrição
               <input
                 required
+                list="transaction-suggestions"
+                placeholder="Ex: Salário, mercado, aluguel"
                 value={form.description}
-                onChange={(event) => setForm({ ...form, description: event.target.value })}
+                onChange={(event) => {
+                  setDuplicateWarning(false)
+                  setForm({ ...form, description: event.target.value })
+                }}
               />
+              <datalist id="transaction-suggestions">
+                {suggestions.map((suggestion) => (
+                  <option key={suggestion} value={suggestion} />
+                ))}
+              </datalist>
             </label>
             <label>
               Valor
               <input
                 required
                 type="number"
-                min="0"
                 step="0.01"
+                placeholder="100 entra, -16 sai"
                 value={form.amount}
-                onChange={(event) => setForm({ ...form, amount: event.target.value })}
+                onChange={(event) => {
+                  setDuplicateWarning(false)
+                  setForm({ ...form, amount: event.target.value })
+                }}
               />
-            </label>
-            <div className="form-grid">
-              <label>
-                Tipo
-                <select
-                  value={form.type}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      type: event.target.value,
-                      categoryId:
-                        profileCategories.find((item) => item.type === event.target.value)?.id || form.categoryId,
-                    })
-                  }
-                >
-                  <option value="EXPENSE">Despesa</option>
-                  <option value="INCOME">Receita</option>
-                </select>
-              </label>
-              <label>
-                Status
-                <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
-                  <option value="PAID">Pago</option>
-                  <option value="PENDING">Pendente</option>
-                </select>
-              </label>
-            </div>
-            <label>
-              Categoria
-              <select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })}>
-                {profileCategories
-                  .filter((item) => item.type === form.type)
-                  .map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label>
-              Conta
-              <select value={form.accountId} onChange={(event) => setForm({ ...form, accountId: event.target.value })}>
-                {profileAccounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
             </label>
             <label>
               Data
               <input
+                required
                 type="date"
                 value={form.dueDate}
-                onChange={(event) => setForm({ ...form, dueDate: event.target.value })}
+                onChange={(event) => {
+                  setDuplicateWarning(false)
+                  setForm({ ...form, dueDate: event.target.value })
+                }}
               />
             </label>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={form.recurring}
-                onChange={(event) => setForm({ ...form, recurring: event.target.checked })}
-              />
-              Repetir na projeção mensal
-            </label>
-            <button type="submit">
+            <div className="smart-help">
               <CheckCircle2 size={18} />
-              Salvar lançamento
-            </button>
+              <span>
+                Valor positivo vira entrada. Valor negativo vira saída. O movimento será salvo como pago.
+                {selectedCategory ? ` Categoria sugerida: ${selectedCategory.name}.` : ''}
+              </span>
+            </div>
+            {possibleNegativeDate ? (
+              <div className="smart-help warning">
+                <AlertTriangle size={18} />
+                <span>Esse gasto pode te deixar negativo em {possibleNegativeDate.slice(8, 10)}/{possibleNegativeDate.slice(5, 7)}.</span>
+              </div>
+            ) : null}
+            {formError ? <span className="form-error">{formError}</span> : null}
+            <div className="modal-actions">
+              {editingTransaction ? (
+                <button
+                  className="danger-button"
+                  type="button"
+                  onClick={() => handleDeleteTransaction(editingTransaction)}
+                >
+                  <Trash2 size={18} />
+                  Excluir
+                </button>
+              ) : null}
+              {duplicateWarning ? (
+                <button className="secondary-submit" type="button" onClick={(event) => handleSaveTransaction(event, true)}>
+                  Salvar mesmo assim
+                </button>
+              ) : null}
+              <button type="submit">
+                <CheckCircle2 size={18} />
+                Salvar
+              </button>
+            </div>
           </form>
         </Modal>
       ) : null}
@@ -747,28 +614,26 @@ function App() {
               <Target size={24} />
               <div>
                 <strong>
-                  {projection.turnPointMonth
+                  {projection?.turnPointMonth
                     ? `Virada estimada no mês ${projection.turnPointMonth}`
                     : 'Ainda sem virada no horizonte projetado'}
                 </strong>
-                <p>{projection.recommendation}</p>
+                <p>{projection?.recommendation || 'Calculando sua projeção...'}</p>
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={projection.projection}>
-                <CartesianGrid stroke="#243127" vertical={false} />
-                <XAxis dataKey="month" tickFormatter={(value) => `M${value}`} stroke="#8fa99a" />
-                <YAxis stroke="#8fa99a" />
-                <Tooltip formatter={(value) => currency.format(Number(value))} />
-                <Area type="monotone" dataKey="balance" stroke="#2f9e44" fill="#2f9e4440" strokeWidth={3} />
-              </AreaChart>
-            </ResponsiveContainer>
-            <div className="practice-list">
-              <span>Boas práticas</span>
-              <p>Corte o que é variável antes de atrasar compromissos fixos.</p>
-              <p>Ao ficar positivo, direcione parte do excedente para reserva de emergência.</p>
-              <p>Separe lançamentos pessoais e empresariais para enxergar a origem do problema.</p>
-            </div>
+            {projection ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={projection.projection}>
+                  <CartesianGrid stroke="#d9e2dc" vertical={false} />
+                  <XAxis dataKey="month" tickFormatter={(value) => `M${value}`} stroke="#64748b" />
+                  <YAxis stroke="#64748b" />
+                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                  <Area type="monotone" dataKey="balance" stroke="#2f9e44" fill="#2f9e4440" strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <LoadingState />
+            )}
           </div>
         </Modal>
       ) : null}
@@ -793,6 +658,24 @@ function Metric({
       <p>{title}</p>
       <strong>{currency.format(value)}</strong>
     </article>
+  )
+}
+
+function LoadingState() {
+  return (
+    <section className="state">
+      <span className="loader" />
+      <strong>Carregando seus movimentos...</strong>
+    </section>
+  )
+}
+
+function EmptyChartState() {
+  return (
+    <section className="state empty-mini">
+      <WalletCards size={24} />
+      <strong>Sem dados para mostrar.</strong>
+    </section>
   )
 }
 

@@ -101,6 +101,32 @@ app.post('/api/transactions', requireAuth, async (req, res) => {
   res.status(201).json({ transaction })
 })
 
+app.put('/api/transactions/:id', requireAuth, async (req, res) => {
+  const input = transactionSchema.safeParse(req.body)
+  if (!input.success) return res.status(400).json({ error: 'Lancamento invalido.' })
+
+  const prisma = getPrisma()
+  const transaction = await prisma.transaction.update({
+    where: { id: String(req.params.id) },
+    data: {
+      profileId: input.data.profileId,
+      accountId: input.data.accountId,
+      categoryId: input.data.categoryId,
+      type: input.data.type,
+      status: input.data.status,
+      description: input.data.description,
+      amount: input.data.amount,
+      dueDate: input.data.dueDate,
+      paidAt: input.data.paidAt,
+      recurring: input.data.recurring,
+      notes: input.data.notes,
+    },
+    include: { account: true, category: true, user: { select: { name: true } } },
+  })
+
+  res.json({ transaction })
+})
+
 app.delete('/api/transactions/:id', requireAuth, async (req, res) => {
   const prisma = getPrisma()
   await prisma.transaction.delete({ where: { id: String(req.params.id) } })
