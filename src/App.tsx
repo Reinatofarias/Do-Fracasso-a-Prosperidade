@@ -227,6 +227,7 @@ function App() {
   const [formError, setFormError] = useState('')
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
+  const [activeNavigation, setActiveNavigation] = useState('dashboard')
   const [guidedMessage, setGuidedMessage] = useState('')
   const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
@@ -288,6 +289,7 @@ function App() {
   )
   const currentAccountIcon = resolvedAccount?.type === 'business' ? '🏢' : resolvedAccount?.type === 'all' ? '📊' : '🏠'
   const accountKind = resolvedAccount?.type === 'business' ? 'business' : 'personal'
+  const canUndoDeletion = toast === 'Lançamento removido' && Boolean(deletedTransaction)
 
   useEffect(() => {
     if (!session?.token) return
@@ -448,12 +450,7 @@ function App() {
 
     setCurrentAccount(nextAccount)
     if (nextAccount.profileId) setActiveProfile(nextAccount.profileId)
-  }
-
-  function selectProfile(profile: Profile) {
-    const nextAccount = accountContexts.find((account) => account.profileId === profile.id && !account.disabled)
-    setActiveProfile(profile.id)
-    if (nextAccount) setCurrentAccount(nextAccount)
+    setToast(`Você está em ${nextAccount.name}.`)
   }
 
   function handleGuidedAction(kind: 'save' | 'debt' | 'business') {
@@ -489,6 +486,11 @@ function App() {
     })
     setProfileModalOpen(false)
     setToast('Perfil criado nesta sessão.')
+  }
+
+  function navigateSidebar(sectionId: string) {
+    setActiveNavigation(sectionId)
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const normalizedAmount = parseCurrencyInput(form.amount)
@@ -575,18 +577,39 @@ function App() {
           </div>
         </div>
 
-        <nav>
-          {profiles.map((profile) => (
-            <button
-              key={profile.id}
-              className={profile.id === activeProfile ? 'active' : ''}
-              onClick={() => selectProfile(profile)}
-              type="button"
-            >
-              {profile.type === 'PERSONAL' ? <UserRound size={18} /> : <Building2 size={18} />}
-              {profile.name}
-            </button>
-          ))}
+        <nav aria-label="Navegação principal">
+          <button
+            className={activeNavigation === 'dashboard' ? 'active' : ''}
+            onClick={() => navigateSidebar('dashboard')}
+            type="button"
+          >
+            <WalletCards size={18} />
+            Dashboard
+          </button>
+          <button
+            className={activeNavigation === 'movements' ? 'active' : ''}
+            onClick={() => navigateSidebar('movements')}
+            type="button"
+          >
+            <Landmark size={18} />
+            Movimentos
+          </button>
+          <button
+            className={activeNavigation === 'reports' ? 'active' : ''}
+            onClick={() => navigateSidebar('reports')}
+            type="button"
+          >
+            <CircleDollarSign size={18} />
+            Relatórios
+          </button>
+          <button
+            className={activeNavigation === 'settings' ? 'active' : ''}
+            onClick={() => navigateSidebar('settings')}
+            type="button"
+          >
+            <ShieldCheck size={18} />
+            Configurações
+          </button>
         </nav>
 
         <div className="verse">
@@ -596,7 +619,7 @@ function App() {
       </aside>
 
       <section className="workspace">
-        <header className="topbar">
+        <header className="topbar" id="dashboard">
           <div>
             <p className="eyebrow">Visão simples do seu dinheiro</p>
             <h1>Dashboard financeiro</h1>
@@ -711,7 +734,7 @@ function App() {
           </button>
         </section>
 
-        <section className="grid">
+        <section className="grid" id="reports">
           <div className="panel chart-panel">
             <div className="panel-heading">
               <div>
@@ -767,7 +790,7 @@ function App() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel" id="movements">
           <div className="panel-heading">
             <div>
               <span>Toque em um item para editar</span>
@@ -805,6 +828,20 @@ function App() {
             </div>
           ) : null}
         </section>
+
+        <section className="panel settings-panel" id="settings">
+          <div className="panel-heading">
+            <div>
+              <span>Preferências</span>
+              <h3>Configurações</h3>
+            </div>
+            <ShieldCheck size={20} />
+          </div>
+          <p>
+            O contexto financeiro é escolhido no seletor de perfil no topo. Configurações persistentes de novos perfis
+            exigem evolução futura no backend.
+          </p>
+        </section>
       </section>
 
       <button className="fab" type="button" onClick={openCreateTransaction} aria-label="Adicionar movimento">
@@ -814,7 +851,7 @@ function App() {
       {toast ? (
         <div className="toast" role="status">
           <span>{toast}</span>
-          {deletedTransaction ? (
+          {canUndoDeletion ? (
             <button type="button" onClick={handleUndoDelete}>
               Desfazer
             </button>

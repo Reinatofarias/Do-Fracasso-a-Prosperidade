@@ -314,6 +314,13 @@ nav button:hover,
   padding: 32px;
 }
 
+#dashboard,
+#reports,
+#movements,
+#settings {
+  scroll-margin-top: 24px;
+}
+
 .topbar {
   display: flex;
   align-items: flex-start;
@@ -799,6 +806,16 @@ nav button:hover,
 .panel:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-hover);
+}
+
+.settings-panel {
+  margin-top: 18px;
+}
+
+.settings-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
 }
 
 .panel-heading {
