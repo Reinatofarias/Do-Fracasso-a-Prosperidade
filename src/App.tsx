@@ -37,6 +37,7 @@ import {
 import { useTransactions } from './hooks/useTransactions'
 import {
   api,
+  parseCurrencyInput,
   suggestCategory,
   todayIso,
   type Dashboard,
@@ -46,6 +47,7 @@ import {
   type TransactionInput,
 } from './services/transactionService'
 import { createNarrative, generateFinancialInsights, wouldCreateNegativeBalance } from './services/financialInsightsService'
+import { getFinancialPlan, type FinancialPlan } from './services/planningService'
 import './App.css'
 
 type Session = {
@@ -57,6 +59,16 @@ const currency = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
 })
+
+function formatCurrencyInput(value: string | number) {
+  const cents = Math.round(Math.abs(Number(value)) * 100)
+  return currency.format(cents / 100)
+}
+
+function maskCurrencyInput(value: string) {
+  const digits = value.replace(/\D/g, '')
+  return currency.format(Number(digits || '0') / 100)
+}
 
 const demoLoginEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true'
 
@@ -74,6 +86,7 @@ function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [projection, setProjection] = useState<Projection | null>(null)
   const [form, setForm] = useState<TransactionInput>({ description: '', amount: '', dueDate: todayIso() })
+  const [transactionType, setTransactionType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE')
   const [formError, setFormError] = useState('')
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
@@ -107,8 +120,9 @@ function App() {
   })
 
   const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
+  const financialPlan = useMemo(() => getFinancialPlan(transactions), [transactions])
   const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
-  const financialStatus = useMemo(() => getFinancialStatus(dashboard, transactions.length), [dashboard, transactions.length])
+  const financialStatus = useMemo(() => getFinancialStatus(financialPlan, transactions.length), [financialPlan, transactions.length])
   const suggestions = useMemo(
     () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
     [transactions],
@@ -185,6 +199,7 @@ function App() {
   function openCreateTransaction() {
     setEditingTransaction(null)
     setForm(emptyInput)
+    setTransactionType('EXPENSE')
     setFormError('')
     setDuplicateWarning(false)
     setTransactionOpen(true)
@@ -192,9 +207,10 @@ function App() {
 
   function openEditTransaction(transaction: Transaction) {
     setEditingTransaction(transaction)
+    setTransactionType(transaction.type)
     setForm({
       description: transaction.description,
-      amount: transaction.type === 'EXPENSE' ? `-${Number(transaction.amount)}` : String(transaction.amount),
+      amount: formatCurrencyInput(transaction.amount),
       dueDate: transaction.dueDate.slice(0, 10),
     })
     setFormError('')
@@ -206,7 +222,12 @@ function App() {
     event.preventDefault()
     setFormError('')
 
-    const result = await saveTransaction(form, { editingId: editingTransaction?.id, allowDuplicate })
+    const parsedAmount = parseCurrencyInput(form.amount)
+    const signedAmount = transactionType === 'EXPENSE' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount)
+    const result = await saveTransaction(
+      { ...form, amount: Number.isFinite(parsedAmount) ? signedAmount.toFixed(2) : form.amount },
+      { editingId: editingTransaction?.id, allowDuplicate },
+    )
     if (!result.ok) {
       setFormError(result.error)
       setDuplicateWarning(Boolean(result.duplicate))
@@ -247,17 +268,17 @@ function App() {
     setDemoMode(false)
   }
 
-  const normalizedAmount = Number(form.amount.replace(',', '.'))
+  const normalizedAmount = parseCurrencyInput(form.amount)
   const possibleNegativeDate =
-    Number.isFinite(normalizedAmount) && normalizedAmount < 0
+    Number.isFinite(normalizedAmount) && transactionType === 'EXPENSE'
       ? wouldCreateNegativeBalance(transactions, {
           amount: Math.abs(normalizedAmount),
           type: 'EXPENSE',
           dueDate: form.dueDate || todayIso(),
         })
       : null
-  const selectedCategory = Number.isFinite(normalizedAmount)
-    ? suggestCategory(form.description, normalizedAmount, categories)
+  const selectedCategory = Number.isFinite(normalizedAmount) && normalizedAmount > 0
+    ? suggestCategory(form.description, transactionType === 'EXPENSE' ? -normalizedAmount : normalizedAmount, categories)
     : null
 
   if (!sessionChecked) {
@@ -426,10 +447,13 @@ function App() {
             {!loading && transactions.length ? (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={[{ name: 'Atual', entradas: dashboard.income, saidas: dashboard.expense }]}>
-                  <CartesianGrid stroke="#d9e2dc" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" />
-                  <YAxis stroke="#64748b" />
-                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                  <CartesianGrid stroke="#24312b" vertical={false} />
+                  <XAxis dataKey="name" stroke="#91a39a" />
+                  <YAxis stroke="#91a39a" />
+                  <Tooltip
+                    formatter={(value) => currency.format(Number(value))}
+                    contentStyle={{ background: '#111715', border: '1px solid #1c2622', color: '#f2f7f4' }}
+                  />
                   <Bar dataKey="entradas" fill="#2f9e44" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="saidas" fill="#ef4444" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -454,7 +478,10 @@ function App() {
                       <Cell key={item.name} fill={item.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                  <Tooltip
+                    formatter={(value) => currency.format(Number(value))}
+                    contentStyle={{ background: '#111715', border: '1px solid #1c2622', color: '#f2f7f4' }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -543,17 +570,34 @@ function App() {
                 ))}
               </datalist>
             </label>
+            <div className="movement-type" role="group" aria-label="Tipo do movimento">
+              <button
+                className={transactionType === 'INCOME' ? 'active income' : 'income'}
+                type="button"
+                onClick={() => setTransactionType('INCOME')}
+              >
+                <ArrowUpRight size={18} />
+                Entrada
+              </button>
+              <button
+                className={transactionType === 'EXPENSE' ? 'active expense' : 'expense'}
+                type="button"
+                onClick={() => setTransactionType('EXPENSE')}
+              >
+                <ArrowDownLeft size={18} />
+                Saída
+              </button>
+            </div>
             <label>
               Valor
               <input
                 required
-                type="number"
-                step="0.01"
-                placeholder="100 entra, -16 sai"
+                inputMode="numeric"
+                placeholder="R$ 0,00"
                 value={form.amount}
                 onChange={(event) => {
                   setDuplicateWarning(false)
-                  setForm({ ...form, amount: event.target.value })
+                  setForm({ ...form, amount: maskCurrencyInput(event.target.value) })
                 }}
               />
             </label>
@@ -569,13 +613,12 @@ function App() {
                 }}
               />
             </label>
-            <div className="smart-help">
-              <CheckCircle2 size={18} />
-              <span>
-                Valor positivo vira entrada. Valor negativo vira saída. O movimento será salvo como pago.
-                {selectedCategory ? ` Categoria sugerida: ${selectedCategory.name}.` : ''}
-              </span>
-            </div>
+            {selectedCategory ? (
+              <div className="smart-help">
+                <CheckCircle2 size={18} />
+                <span>Categoria sugerida: {selectedCategory.name}.</span>
+              </div>
+            ) : null}
             {possibleNegativeDate ? (
               <div className="smart-help warning">
                 <AlertTriangle size={18} />
@@ -625,10 +668,13 @@ function App() {
             {projection ? (
               <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={projection.projection}>
-                  <CartesianGrid stroke="#d9e2dc" vertical={false} />
-                  <XAxis dataKey="month" tickFormatter={(value) => `M${value}`} stroke="#64748b" />
-                  <YAxis stroke="#64748b" />
-                  <Tooltip formatter={(value) => currency.format(Number(value))} />
+                  <CartesianGrid stroke="#24312b" vertical={false} />
+                  <XAxis dataKey="month" tickFormatter={(value) => `M${value}`} stroke="#91a39a" />
+                  <YAxis stroke="#91a39a" />
+                  <Tooltip
+                    formatter={(value) => currency.format(Number(value))}
+                    contentStyle={{ background: '#111715', border: '1px solid #1c2622', color: '#f2f7f4' }}
+                  />
                   <Area type="monotone" dataKey="balance" stroke="#2f9e44" fill="#2f9e4440" strokeWidth={3} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -649,7 +695,7 @@ type FinancialStatus = {
   label: string
 }
 
-function getFinancialStatus(dashboard: Dashboard, transactionCount: number): FinancialStatus {
+function getFinancialStatus(plan: FinancialPlan, transactionCount: number): FinancialStatus {
   if (!transactionCount) {
     return {
       tone: 'neutral',
@@ -659,20 +705,20 @@ function getFinancialStatus(dashboard: Dashboard, transactionCount: number): Fin
     }
   }
 
-  if (dashboard.result < 0) {
+  if (plan.status === 'negativo') {
     return {
       tone: 'negative',
       title: 'Atenção: você está gastando mais do que ganha',
-      message: `Faltam ${currency.format(Math.abs(dashboard.result))} para fechar o mês no positivo.`,
+      message: `Faltam ${currency.format(Math.abs(plan.saldo))} para fechar o mês no positivo.`,
       label: 'Negativo',
     }
   }
 
-  if (dashboard.income > 0 && dashboard.result < dashboard.income * 0.12) {
+  if (plan.status === 'alerta') {
     return {
       tone: 'warning',
-      title: 'Margem apertada este mês',
-      message: `Você ainda está positivo, mas só sobraram ${currency.format(dashboard.result)}.`,
+      title: 'Mês no limite',
+      message: 'Entradas e saídas estão empatadas. Qualquer novo gasto deixa o mês negativo.',
       label: 'Alerta',
     }
   }
@@ -680,7 +726,7 @@ function getFinancialStatus(dashboard: Dashboard, transactionCount: number): Fin
   return {
     tone: 'positive',
     title: 'Você está no caminho certo',
-    message: `Você ganhou ${currency.format(dashboard.income)}, gastou ${currency.format(dashboard.expense)} e sobrou ${currency.format(dashboard.result)}.`,
+    message: `Você ganhou ${currency.format(plan.totalEntradas)}, gastou ${currency.format(plan.totalSaidas)} e sobrou ${currency.format(plan.saldo)}.`,
     label: 'Positivo',
   }
 }

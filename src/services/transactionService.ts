@@ -70,6 +70,23 @@ export type Projection = {
 
 export const todayIso = () => new Date().toISOString().slice(0, 10)
 
+export function parseCurrencyInput(value: string) {
+  const normalized = value.trim()
+  const isNegative = normalized.startsWith('-')
+  const plainNumber = normalized.replace('-', '').trim()
+
+  if (/^\d+(\.\d+)?$/.test(plainNumber)) {
+    const parsed = Number(plainNumber)
+    return isNegative ? -parsed : parsed
+  }
+
+  const digits = normalized.replace(/\D/g, '')
+  const parsed = Number(digits) / 100
+
+  if (!Number.isFinite(parsed)) return Number.NaN
+  return isNegative ? -parsed : parsed
+}
+
 export const demoProfiles: Profile[] = [
   { id: 'personal-default', name: 'Família', type: 'PERSONAL' },
   { id: 'business-default', name: 'Empresa', type: 'BUSINESS' },
@@ -233,7 +250,7 @@ export function normalizeTransactionInput(
   categories: Category[],
 ): NormalizedTransactionInput {
   const description = input.description.trim()
-  const amount = Number(input.amount.replace(',', '.'))
+  const amount = parseCurrencyInput(input.amount)
   const accountId = accounts.find((item) => item.profileId === profileId)?.id || ''
   const type = amount >= 0 ? 'INCOME' : 'EXPENSE'
   const category = suggestCategory(description, amount, categories.filter((item) => item.profileId === profileId))
@@ -254,10 +271,10 @@ export function normalizeTransactionInput(
 export function validateTransactionInput(input: TransactionInput) {
   if (!input.description.trim()) return 'Informe uma descrição simples, como "Mercado" ou "Salário".'
   if (input.description.trim().length < 2) return 'A descrição precisa ter pelo menos 2 letras.'
-  if (!input.amount.trim()) return 'Informe o valor. Use negativo para gasto, como -16.'
+  if (!input.amount.trim()) return 'Informe o valor.'
 
-  const amount = Number(input.amount.replace(',', '.'))
-  if (!Number.isFinite(amount) || amount === 0) return 'Use um valor válido. Positivo entra, negativo sai.'
+  const amount = parseCurrencyInput(input.amount)
+  if (!Number.isFinite(amount) || amount === 0) return 'Informe um valor válido maior que zero.'
   if (!input.dueDate) return 'Informe a data do movimento.'
 
   return ''
