@@ -18,7 +18,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Building2,
-  CalendarDays,
   CheckCircle2,
   CircleDollarSign,
   Edit3,
@@ -29,6 +28,7 @@ import {
   Sparkles,
   Target,
   Trash2,
+  TrendingDown,
   TrendingUp,
   UserRound,
   WalletCards,
@@ -39,6 +39,7 @@ import {
   api,
   suggestCategory,
   todayIso,
+  type Dashboard,
   type Projection,
   type Profile,
   type Transaction,
@@ -107,6 +108,7 @@ function App() {
 
   const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
   const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
+  const financialStatus = useMemo(() => getFinancialStatus(dashboard, transactions.length), [dashboard, transactions.length])
   const suggestions = useMemo(
     () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
     [transactions],
@@ -364,16 +366,12 @@ function App() {
           </div>
         </header>
 
-        <section className="hero-actions">
-          <div className="narrative">
-            <span>Resumo do mês</span>
-            <strong>{narrative}</strong>
-          </div>
-          <button className="primary-action" type="button" onClick={openCreateTransaction}>
-            <Plus size={20} />
-            Adicionar movimento
-          </button>
-        </section>
+        <FinancialStatusHero
+          dashboard={dashboard}
+          narrative={narrative}
+          status={financialStatus}
+          onAddMovement={openCreateTransaction}
+        />
 
         {error ? (
           <section className="state error-state">
@@ -384,10 +382,16 @@ function App() {
         ) : null}
 
         <section className="metrics">
-          <Metric title="Saldo" value={dashboard.balance} icon={<WalletCards size={22} />} tone="gold" />
+          <Metric
+            title="Sobrou no mês"
+            value={dashboard.result}
+            icon={dashboard.result >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+            tone={dashboard.result >= 0 ? 'green' : 'red'}
+            featured
+          />
           <Metric title="Entradas" value={dashboard.income} icon={<ArrowUpRight size={22} />} tone="green" />
           <Metric title="Saídas" value={dashboard.expense} icon={<ArrowDownLeft size={22} />} tone="red" />
-          <Metric title="Sobrou" value={dashboard.result} icon={<TrendingUp size={22} />} tone={dashboard.result >= 0 ? 'green' : 'red'} />
+          <Metric title="Saldo" value={dashboard.balance} icon={<WalletCards size={22} />} tone="gold" />
         </section>
 
         <section className="insights">
@@ -416,7 +420,7 @@ function App() {
                 <span>Fluxo</span>
                 <h3>Entradas x saídas</h3>
               </div>
-              <CalendarDays size={20} />
+              <TrendBadge dashboard={dashboard} />
             </div>
             {loading ? <LoadingState /> : null}
             {!loading && transactions.length ? (
@@ -431,7 +435,7 @@ function App() {
                 </BarChart>
               </ResponsiveContainer>
             ) : null}
-            {!loading && !transactions.length ? <EmptyChartState /> : null}
+            {!loading && !transactions.length ? <EmptyChartState onAddMovement={openCreateTransaction} /> : null}
           </div>
 
           <div className="panel chart-panel">
@@ -454,7 +458,7 @@ function App() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyChartState />
+              <EmptyChartState onAddMovement={openCreateTransaction} />
             )}
           </div>
         </section>
@@ -471,12 +475,9 @@ function App() {
           {!loading && !transactions.length ? (
             <section className="empty-state">
               <WalletCards size={28} />
-              <strong>Você ainda não adicionou nenhum movimento.</strong>
-              <span>Comece adicionando seu primeiro ganho ou gasto.</span>
-              <button type="button" onClick={openCreateTransaction}>
-                <Plus size={18} />
-                Adicionar movimento
-              </button>
+              <strong>Comece simples.</strong>
+              <span>Adicione um ganho ou gasto e o sistema calcula o resto pra você.</span>
+              <PrimaryActionButton onClick={openCreateTransaction} />
             </section>
           ) : null}
           {!loading && transactions.length ? (
@@ -641,19 +642,114 @@ function App() {
   )
 }
 
+type FinancialStatus = {
+  tone: 'positive' | 'warning' | 'negative' | 'neutral'
+  title: string
+  message: string
+  label: string
+}
+
+function getFinancialStatus(dashboard: Dashboard, transactionCount: number): FinancialStatus {
+  if (!transactionCount) {
+    return {
+      tone: 'neutral',
+      title: 'Comece simples',
+      message: 'Adicione um ganho ou gasto e o sistema calcula o resto pra você.',
+      label: 'Sem movimentos',
+    }
+  }
+
+  if (dashboard.result < 0) {
+    return {
+      tone: 'negative',
+      title: 'Atenção: você está gastando mais do que ganha',
+      message: `Faltam ${currency.format(Math.abs(dashboard.result))} para fechar o mês no positivo.`,
+      label: 'Negativo',
+    }
+  }
+
+  if (dashboard.income > 0 && dashboard.result < dashboard.income * 0.12) {
+    return {
+      tone: 'warning',
+      title: 'Margem apertada este mês',
+      message: `Você ainda está positivo, mas só sobraram ${currency.format(dashboard.result)}.`,
+      label: 'Alerta',
+    }
+  }
+
+  return {
+    tone: 'positive',
+    title: 'Você está no caminho certo',
+    message: `Você ganhou ${currency.format(dashboard.income)}, gastou ${currency.format(dashboard.expense)} e sobrou ${currency.format(dashboard.result)}.`,
+    label: 'Positivo',
+  }
+}
+
+function FinancialStatusHero({
+  dashboard,
+  narrative,
+  status,
+  onAddMovement,
+}: {
+  dashboard: Dashboard
+  narrative: string
+  status: FinancialStatus
+  onAddMovement: () => void
+}) {
+  return (
+    <section className={`financial-hero ${status.tone}`}>
+      <div className="status-copy">
+        <div className="status-kicker">
+          <span className="status-dot" />
+          {status.label}
+        </div>
+        <h2>{status.title}</h2>
+        <p>{status.message}</p>
+        <span className="status-narrative">{narrative}</span>
+      </div>
+      <div className="hero-money">
+        <span>Sobrou no mês</span>
+        <strong>{currency.format(dashboard.result)}</strong>
+        <PrimaryActionButton onClick={onAddMovement} />
+      </div>
+    </section>
+  )
+}
+
+function PrimaryActionButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="primary-action" type="button" onClick={onClick}>
+      <Plus size={20} />
+      Adicionar movimento
+    </button>
+  )
+}
+
+function TrendBadge({ dashboard }: { dashboard: Dashboard }) {
+  const positive = dashboard.result >= 0
+  return (
+    <div className={`trend-badge ${positive ? 'positive' : 'negative'}`}>
+      {positive ? <TrendingUp size={17} /> : <TrendingDown size={17} />}
+      {positive ? 'Tendência positiva' : 'Tendência negativa'}
+    </div>
+  )
+}
+
 function Metric({
   title,
   value,
   icon,
   tone,
+  featured = false,
 }: {
   title: string
   value: number
   icon: React.ReactNode
   tone: 'gold' | 'green' | 'red'
+  featured?: boolean
 }) {
   return (
-    <article className={`metric ${tone}`}>
+    <article className={`metric ${tone}${featured ? ' featured' : ''}`}>
       <span>{icon}</span>
       <p>{title}</p>
       <strong>{currency.format(value)}</strong>
@@ -670,11 +766,16 @@ function LoadingState() {
   )
 }
 
-function EmptyChartState() {
+function EmptyChartState({ onAddMovement }: { onAddMovement: () => void }) {
   return (
     <section className="state empty-mini">
       <WalletCards size={24} />
-      <strong>Sem dados para mostrar.</strong>
+      <strong>Comece simples.</strong>
+      <span>Adicione um ganho ou gasto e o sistema calcula o resto pra você.</span>
+      <button className="mini-action" type="button" onClick={onAddMovement}>
+        <Plus size={16} />
+        Adicionar
+      </button>
     </section>
   )
 }
