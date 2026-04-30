@@ -89,6 +89,12 @@ function maskCurrencyInput(value: string) {
   return currency.format(Number(digits || '0') / 100)
 }
 
+function formatDateLabel(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(
+    new Date(`${value.slice(0, 10)}T00:00:00`),
+  )
+}
+
 function getMonthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
@@ -228,6 +234,7 @@ function App() {
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
   const [activeNavigation, setActiveNavigation] = useState('dashboard')
+  const [movementFilter, setMovementFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
   const handleDemoMode = useCallback(() => setDemoMode(true), [])
@@ -284,6 +291,15 @@ function App() {
   const suggestions = useMemo(
     () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
     [transactions],
+  )
+  const filteredMovements = useMemo(
+    () =>
+      transactions.filter((transaction) => {
+        if (movementFilter === 'income') return transaction.type === 'INCOME'
+        if (movementFilter === 'expense') return transaction.type === 'EXPENSE'
+        return true
+      }),
+    [movementFilter, transactions],
   )
   const currentAccountIcon = resolvedAccount?.type === 'business' ? '🏢' : resolvedAccount?.type === 'all' ? '📊' : '🏠'
   const accountKind = resolvedAccount?.type === 'business' ? 'business' : 'personal'
@@ -755,36 +771,74 @@ function App() {
         <section className="panel" id="movements">
           <div className="panel-heading">
             <div>
-              <span>Toque em um item para editar</span>
+              <span>{currentAccountIcon} {resolvedAccount?.name || 'Família'}</span>
               <h3>Movimentos</h3>
             </div>
             <Landmark size={20} />
+          </div>
+          <div className="movement-filters" role="group" aria-label="Filtrar movimentos">
+            <button className={movementFilter === 'all' ? 'active' : ''} type="button" onClick={() => setMovementFilter('all')}>
+              Todos
+            </button>
+            <button
+              className={movementFilter === 'income' ? 'active income' : 'income'}
+              type="button"
+              onClick={() => setMovementFilter('income')}
+            >
+              Entradas
+            </button>
+            <button
+              className={movementFilter === 'expense' ? 'active expense' : 'expense'}
+              type="button"
+              onClick={() => setMovementFilter('expense')}
+            >
+              Saídas
+            </button>
           </div>
           {loading ? <LoadingState /> : null}
           {!loading && !transactions.length ? (
             <section className="empty-state">
               <WalletCards size={28} />
-              <strong>Vamos começar simples.</strong>
-              <span>Adicione um ganho ou gasto. O sistema organiza o resto pra você.</span>
+              <strong>Você ainda não tem movimentações</strong>
+              <PrimaryActionButton onClick={openCreateTransaction} />
             </section>
           ) : null}
-          {!loading && transactions.length ? (
+          {!loading && transactions.length && !filteredMovements.length ? (
+            <section className="empty-state compact">
+              <WalletCards size={24} />
+              <strong>Nenhum movimento nesse filtro</strong>
+            </section>
+          ) : null}
+          {!loading && filteredMovements.length ? (
             <div className="transactions">
-              {transactions.map((item) => (
-                <button key={item.id} className="transaction" type="button" onClick={() => openEditTransaction(item)}>
+              {filteredMovements.map((item) => (
+                <article key={item.id} className="transaction">
                   <div className={`transaction-icon ${item.type.toLowerCase()}`}>
                     {item.type === 'INCOME' ? <ArrowUpRight size={18} /> : <ArrowDownLeft size={18} />}
                   </div>
                   <div>
                     <strong>{item.description}</strong>
-                    <span>{item.category?.name || 'Categoria sugerida'} · {item.dueDate.slice(0, 10)}</span>
+                    <span>{formatDateLabel(item.dueDate)} · {item.type === 'INCOME' ? 'Entrada' : 'Saída'}</span>
                   </div>
-                  <span className="status paid">Pago</span>
                   <strong className={item.type === 'INCOME' ? 'money-positive' : 'money-negative'}>
                     {item.type === 'INCOME' ? '+' : '-'} {currency.format(Number(item.amount))}
                   </strong>
-                  <Edit3 className="row-action" size={17} />
-                </button>
+                  <div className="transaction-actions">
+                    <button type="button" onClick={() => openEditTransaction(item)} aria-label={`Editar ${item.description}`}>
+                      <Edit3 size={16} />
+                      Editar
+                    </button>
+                    <button
+                      className="danger-inline"
+                      type="button"
+                      onClick={() => handleDeleteTransaction(item)}
+                      aria-label={`Excluir ${item.description}`}
+                    >
+                      <Trash2 size={16} />
+                      Excluir
+                    </button>
+                  </div>
+                </article>
               ))}
             </div>
           ) : null}

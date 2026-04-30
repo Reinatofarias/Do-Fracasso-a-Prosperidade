@@ -803,10 +803,46 @@ nav button:hover,
   gap: 10px;
 }
 
+.movement-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.movement-filters button {
+  min-height: 38px;
+  color: var(--muted);
+  background: #0d1310;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 900;
+}
+
+.movement-filters button:hover,
+.movement-filters button.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--line-strong);
+}
+
+.movement-filters button.active.income {
+  color: var(--brand-strong);
+  background: var(--green-soft);
+  border-color: rgba(40, 199, 111, 0.28);
+}
+
+.movement-filters button.active.expense {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: rgba(255, 92, 92, 0.28);
+}
+
 .transaction {
   width: 100%;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto 24px;
+  grid-template-columns: 42px minmax(0, 1fr) minmax(140px, auto) auto;
   gap: 14px;
   align-items: center;
   padding: 12px;
@@ -879,6 +915,38 @@ nav button:hover,
 
 .row-action {
   color: #8aa096;
+}
+
+.transaction-actions {
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.transaction-actions button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  background: #151d1a;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 850;
+}
+
+.transaction-actions button:hover {
+  color: var(--brand-strong);
+  border-color: rgba(40, 199, 111, 0.28);
+}
+
+.transaction-actions .danger-inline {
+  color: var(--red);
+}
+
+.empty-state.compact {
+  min-height: 150px;
 }
 
 .state,
@@ -1236,12 +1304,21 @@ nav button:hover,
     align-items: start;
   }
 
+  .transaction-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .transaction-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+
   .primary-action {
     min-width: 0;
   }
 
-  .status,
-  .row-action {
+  .status {
     display: none;
   }
 
