@@ -25,7 +25,6 @@ type UseTransactionsOptions = {
   userName: string
   demoMode: boolean
   activeProfile: string
-  aggregateAccounts?: boolean
   onDemoMode: () => void
   onProfilesLoaded: (profiles: Profile[]) => void
 }
@@ -41,7 +40,6 @@ export function useTransactions({
   userName,
   demoMode,
   activeProfile,
-  aggregateAccounts = false,
   onDemoMode,
   onProfilesLoaded,
 }: UseTransactionsOptions) {
@@ -54,8 +52,8 @@ export function useTransactions({
   const [deletedTransaction, setDeletedTransaction] = useState<Transaction | null>(null)
 
   const filteredTransactions = useMemo(
-    () => transactions.filter((item) => aggregateAccounts || item.profileId === activeProfile),
-    [activeProfile, aggregateAccounts, transactions],
+    () => transactions.filter((item) => item.profileId === activeProfile),
+    [activeProfile, transactions],
   )
   const dashboard = useMemo(() => buildDashboard(filteredTransactions), [filteredTransactions])
 
@@ -71,10 +69,7 @@ export function useTransactions({
       try {
         const [bootstrap, transactionData] = await Promise.all([
           api<{ profiles: Profile[]; accounts: Account[]; categories: Category[] }>('/api/bootstrap', token),
-          api<{ transactions: Transaction[] }>(
-            aggregateAccounts ? '/api/transactions' : `/api/transactions?profileId=${activeProfile}`,
-            token,
-          ),
+          api<{ transactions: Transaction[] }>(`/api/transactions?profileId=${activeProfile}`, token),
         ])
         if (cancelled) return
         setProfiles(bootstrap.profiles)
@@ -96,7 +91,7 @@ export function useTransactions({
     return () => {
       cancelled = true
     }
-  }, [activeProfile, aggregateAccounts, demoMode, onDemoMode, onProfilesLoaded, token])
+  }, [activeProfile, demoMode, onDemoMode, onProfilesLoaded, token])
 
   async function saveTransaction(input: TransactionInput, options: SaveOptions = {}) {
     const validation = validateTransactionInput(input)

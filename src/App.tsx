@@ -100,7 +100,7 @@ function buildAccountContexts(profiles: Profile[], accounts: Account[]): Current
     },
     {
       id: 'personal',
-      name: 'Pessoal',
+      name: 'Família',
       type: 'personal',
       profileId: personalProfile?.id,
       accountId: personalAccount?.id,
@@ -142,7 +142,11 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [demoMode, setDemoMode] = useState(false)
   const [activeProfile, setActiveProfile] = useState('personal-default')
-  const [currentAccountId, setCurrentAccountId] = useState('personal')
+  const [currentAccount, setCurrentAccount] = useState<CurrentAccount>({
+    id: 'personal',
+    name: 'Família',
+    type: 'personal',
+  })
   const [projectionOpen, setProjectionOpen] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
@@ -152,6 +156,7 @@ function App() {
   const [formError, setFormError] = useState('')
   const [duplicateWarning, setDuplicateWarning] = useState(false)
   const [toast, setToast] = useState('')
+  const [guidedMessage, setGuidedMessage] = useState('')
   const [sessionChecked, setSessionChecked] = useState(() => !localStorage.getItem('prosperidade.session'))
 
   const handleDemoMode = useCallback(() => setDemoMode(true), [])
@@ -177,25 +182,25 @@ function App() {
     userName: session?.user.name || 'Usuário',
     demoMode,
     activeProfile,
-    aggregateAccounts: currentAccountId === 'all',
     onDemoMode: handleDemoMode,
     onProfilesLoaded: handleProfilesLoaded,
   })
 
   const accountContexts = useMemo(() => buildAccountContexts(profiles, accounts), [accounts, profiles])
-  const currentAccount = useMemo(
+  const resolvedAccount = useMemo(
     () =>
-      accountContexts.find((account) => account.id === currentAccountId && !account.disabled) ||
+      accountContexts.find((account) => account.id === currentAccount.id && !account.disabled) ||
       accountContexts.find((account) => account.id === 'personal' && !account.disabled) ||
-      accountContexts[0],
-    [accountContexts, currentAccountId],
+      accountContexts[0] ||
+      currentAccount,
+    [accountContexts, currentAccount],
   )
   const transactions = useMemo(
     () =>
-      currentAccount?.aggregate || !currentAccount?.accountId
+      resolvedAccount?.aggregate || !resolvedAccount?.accountId
         ? loadedTransactions
-        : loadedTransactions.filter((transaction) => transaction.accountId === currentAccount.accountId),
-    [currentAccount, loadedTransactions],
+        : loadedTransactions.filter((transaction) => transaction.accountId === resolvedAccount.accountId),
+    [resolvedAccount, loadedTransactions],
   )
   const dashboard = useMemo(() => buildDashboard(transactions), [transactions])
   const insights = useMemo(() => generateFinancialInsights(transactions, dashboard), [dashboard, transactions])
@@ -206,6 +211,8 @@ function App() {
     () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
     [transactions],
   )
+  const currentAccountIcon = resolvedAccount?.type === 'business' ? '🏢' : resolvedAccount?.type === 'all' ? '📊' : '🏠'
+  const accountKind = resolvedAccount?.type === 'business' ? 'business' : 'personal'
 
   useEffect(() => {
     if (!session?.token) return
@@ -305,7 +312,7 @@ function App() {
     const signedAmount = transactionType === 'EXPENSE' ? -Math.abs(parsedAmount) : Math.abs(parsedAmount)
     const result = await saveTransaction(
       { ...form, amount: Number.isFinite(parsedAmount) ? signedAmount.toFixed(2) : form.amount },
-      { editingId: editingTransaction?.id, allowDuplicate, accountId: currentAccount?.accountId },
+      { editingId: editingTransaction?.id, allowDuplicate, accountId: resolvedAccount?.accountId },
     )
     if (!result.ok) {
       setFormError(result.error)
@@ -338,7 +345,7 @@ function App() {
 
   async function openProjection() {
     setProjectionOpen(true)
-    setProjection(await loadProjection(currentAccount?.aggregate ? null : currentAccount?.accountId))
+    setProjection(await loadProjection(resolvedAccount?.aggregate ? null : resolvedAccount?.accountId))
   }
 
   function logout() {
@@ -351,14 +358,28 @@ function App() {
     const nextAccount = accountContexts.find((account) => account.id === accountId)
     if (!nextAccount || nextAccount.disabled) return
 
-    setCurrentAccountId(nextAccount.id)
+    setCurrentAccount(nextAccount)
     if (nextAccount.profileId) setActiveProfile(nextAccount.profileId)
   }
 
   function selectProfile(profile: Profile) {
     const nextAccount = accountContexts.find((account) => account.profileId === profile.id && !account.disabled)
     setActiveProfile(profile.id)
-    if (nextAccount) setCurrentAccountId(nextAccount.id)
+    if (nextAccount) setCurrentAccount(nextAccount)
+  }
+
+  function handleGuidedAction(kind: 'save' | 'debt' | 'business') {
+    const messages = {
+      save:
+        accountKind === 'business'
+          ? 'Revise os gastos fixos da empresa e registre as entradas do mês para enxergar o caixa com clareza.'
+          : 'Comece escolhendo um gasto pequeno para reduzir esta semana e registre tudo que entrar e sair.',
+      debt:
+        'Liste primeiro os pagamentos mais urgentes. Depois acompanhe cada saída para evitar novas parcelas sem necessidade.',
+      business:
+        'Use o contexto da empresa para separar caixa, entradas e despesas operacionais sem misturar com a família.',
+    }
+    setGuidedMessage(messages[kind])
   }
 
   const normalizedAmount = parseCurrencyInput(form.amount)
@@ -470,13 +491,15 @@ function App() {
           <div>
             <p className="eyebrow">Visão simples do seu dinheiro</p>
             <h1>Dashboard financeiro</h1>
+            <div className="context-pill">Você está em: {currentAccountIcon} {resolvedAccount?.name || 'Família'}</div>
           </div>
           <div className="topbar-actions">
             <label className="account-switcher">
-              <span>Conta</span>
-              <select value={currentAccount?.id || currentAccountId} onChange={(event) => selectAccount(event.target.value)}>
+              <span>Contexto</span>
+              <select value={resolvedAccount?.id || currentAccount.id} onChange={(event) => selectAccount(event.target.value)}>
                 {accountContexts.map((account) => (
                   <option key={account.id} value={account.id} disabled={account.disabled}>
+                    {account.type === 'business' ? '🏢 ' : account.type === 'new-business' ? '' : account.type === 'all' ? '📊 ' : '🏠 '}
                     {account.name}
                   </option>
                 ))}
@@ -494,6 +517,7 @@ function App() {
           dashboard={dashboard}
           narrative={narrative}
           status={financialStatus}
+          accountType={accountKind}
           onAddMovement={openCreateTransaction}
         />
 
@@ -529,6 +553,24 @@ function App() {
             </article>
           ))}
         </section>
+
+        <section className="guided-actions" aria-label="Ações guiadas">
+          <button type="button" onClick={() => handleGuidedAction('save')}>
+            Quero economizar
+          </button>
+          <button type="button" onClick={() => handleGuidedAction('debt')}>
+            Quero sair das dívidas
+          </button>
+          <button type="button" onClick={() => handleGuidedAction('business')}>
+            Quero organizar empresa
+          </button>
+        </section>
+        {guidedMessage ? (
+          <section className="guided-message">
+            <Sparkles size={18} />
+            <span>{guidedMessage}</span>
+          </section>
+        ) : null}
 
         <section className="actions-row">
           <button className="secondary" type="button" onClick={openProjection}>
@@ -605,8 +647,8 @@ function App() {
           {!loading && !transactions.length ? (
             <section className="empty-state">
               <WalletCards size={28} />
-              <strong>Comece simples.</strong>
-              <span>Adicione um ganho ou gasto e o sistema calcula o resto pra você.</span>
+              <strong>Vamos começar simples.</strong>
+              <span>Adicione um ganho ou gasto. O sistema organiza o resto pra você.</span>
               <PrimaryActionButton onClick={openCreateTransaction} />
             </section>
           ) : null}
@@ -802,8 +844,8 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
   if (!transactionCount) {
     return {
       tone: 'neutral',
-      title: 'Comece simples',
-      message: 'Adicione um ganho ou gasto e o sistema calcula o resto pra você.',
+      title: 'Vamos começar simples',
+      message: 'Adicione um ganho ou gasto. O sistema organiza o resto pra você.',
       label: 'Sem movimentos',
     }
   }
@@ -838,13 +880,26 @@ function FinancialStatusHero({
   dashboard,
   narrative,
   status,
+  accountType,
   onAddMovement,
 }: {
   dashboard: Dashboard
   narrative: string
   status: FinancialStatus
+  accountType: 'personal' | 'business'
   onAddMovement: () => void
 }) {
+  const emotionalMessage =
+    status.tone === 'positive'
+      ? accountType === 'business'
+        ? 'A empresa está com fluxo positivo.'
+        : 'Você está economizando bem este mês.'
+      : status.tone === 'negative'
+        ? accountType === 'business'
+          ? 'A empresa está gastando mais do que entra.'
+          : 'Atenção aos gastos da família neste mês.'
+        : 'Registre os próximos movimentos para enxergar melhor o mês.'
+
   return (
     <section className={`financial-hero ${status.tone}`}>
       <div className="status-copy">
@@ -854,6 +909,7 @@ function FinancialStatusHero({
         </div>
         <h2>{status.title}</h2>
         <p>{status.message}</p>
+        <p className="emotional-feedback">{emotionalMessage}</p>
         <span className="status-narrative">{narrative}</span>
       </div>
       <div className="hero-money">

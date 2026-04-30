@@ -326,6 +326,18 @@ nav button:hover,
   margin-top: 0;
 }
 
+.context-pill {
+  width: max-content;
+  margin-top: 14px;
+  padding: 8px 11px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
 .topbar-actions,
 .actions-row,
 .modal-actions {
@@ -468,6 +480,12 @@ nav button:hover,
   color: rgba(255, 255, 255, 0.82);
   font-size: clamp(1.05rem, 1.7vw, 1.35rem);
   line-height: 1.45;
+}
+
+.financial-hero .emotional-feedback {
+  max-width: 640px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 850;
 }
 
 .warning p,
@@ -651,6 +669,43 @@ nav button:hover,
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.guided-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.guided-actions button {
+  min-height: 42px;
+  color: var(--text);
+  background: #0f1512;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-weight: 900;
+}
+
+.guided-actions button:hover {
+  color: var(--brand-strong);
+  background: var(--green-soft);
+  border-color: rgba(40, 199, 111, 0.28);
+}
+
+.guided-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 13px 14px;
+  color: var(--brand-strong);
+  background: var(--green-soft);
+  border: 1px solid rgba(40, 199, 111, 0.28);
+  border-radius: 8px;
+  line-height: 1.45;
+  animation: toast-in 220ms ease both;
 }
 
 .actions-row {
