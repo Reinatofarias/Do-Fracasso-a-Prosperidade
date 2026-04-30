@@ -60,11 +60,18 @@ type Session = {
 type CurrentAccount = {
   id: string
   name: string
-  type: 'all' | 'personal' | 'business' | 'new-business'
+  type: 'all' | 'personal' | 'business' | 'create-profile'
   profileId?: string
   accountId?: string
   aggregate?: boolean
   disabled?: boolean
+  localOnly?: boolean
+}
+
+type LocalProfile = {
+  id: string
+  name: string
+  type: 'personal' | 'business'
 }
 
 const currency = new Intl.NumberFormat('pt-BR', {
@@ -82,7 +89,7 @@ function maskCurrencyInput(value: string) {
   return currency.format(Number(digits || '0') / 100)
 }
 
-function buildAccountContexts(profiles: Profile[], accounts: Account[]): CurrentAccount[] {
+function buildAccountContexts(profiles: Profile[], accounts: Account[], localProfiles: LocalProfile[]): CurrentAccount[] {
   const personalProfile = profiles.find((profile) => profile.type === 'PERSONAL') || profiles[0]
   const personalAccount = accounts.find((account) => account.profileId === personalProfile?.id)
   const businessProfiles = profiles.filter((profile) => profile.type === 'BUSINESS')
@@ -94,7 +101,7 @@ function buildAccountContexts(profiles: Profile[], accounts: Account[]): Current
   const contexts: CurrentAccount[] = [
     {
       id: 'all',
-      name: 'Todas as contas',
+      name: 'Todos os perfis',
       type: 'all',
       aggregate: true,
     },
@@ -121,11 +128,19 @@ function buildAccountContexts(profiles: Profile[], accounts: Account[]): Current
     })
   })
 
+  localProfiles.forEach((profile) => {
+    contexts.push({
+      id: profile.id,
+      name: profile.name,
+      type: profile.type,
+      localOnly: true,
+    })
+  })
+
   contexts.push({
-    id: 'new-business',
-    name: '* Nova empresa',
-    type: 'new-business',
-    disabled: true,
+    id: 'create-profile',
+    name: '+ Criar novo perfil',
+    type: 'create-profile',
   })
 
   return contexts
@@ -146,6 +161,15 @@ function App() {
     id: 'personal',
     name: 'Família',
     type: 'personal',
+  })
+  const [localProfiles, setLocalProfiles] = useState<LocalProfile[]>(() => {
+    const saved = localStorage.getItem('prosperidade.localProfiles')
+    return saved ? JSON.parse(saved) : []
+  })
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
+  const [profileForm, setProfileForm] = useState<{ name: string; type: 'personal' | 'business' }>({
+    name: '',
+    type: 'business',
   })
   const [projectionOpen, setProjectionOpen] = useState(false)
   const [transactionOpen, setTransactionOpen] = useState(false)
@@ -186,7 +210,7 @@ function App() {
     onProfilesLoaded: handleProfilesLoaded,
   })
 
-  const accountContexts = useMemo(() => buildAccountContexts(profiles, accounts), [accounts, profiles])
+  const accountContexts = useMemo(() => buildAccountContexts(profiles, accounts, localProfiles), [accounts, localProfiles, profiles])
   const resolvedAccount = useMemo(
     () =>
       accountContexts.find((account) => account.id === currentAccount.id && !account.disabled) ||
@@ -197,7 +221,9 @@ function App() {
   )
   const transactions = useMemo(
     () =>
-      resolvedAccount?.aggregate || !resolvedAccount?.accountId
+      resolvedAccount?.localOnly
+        ? []
+        : resolvedAccount?.aggregate || !resolvedAccount?.accountId
         ? loadedTransactions
         : loadedTransactions.filter((transaction) => transaction.accountId === resolvedAccount.accountId),
     [resolvedAccount, loadedTransactions],
@@ -259,6 +285,10 @@ function App() {
     }
   }, [session?.token])
 
+  useEffect(() => {
+    localStorage.setItem('prosperidade.localProfiles', JSON.stringify(localProfiles))
+  }, [localProfiles])
+
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault()
     setLoginError('')
@@ -283,6 +313,10 @@ function App() {
   }
 
   function openCreateTransaction() {
+    if (resolvedAccount?.localOnly) {
+      setToast('Perfil temporário criado. Para lançar movimentos nele, será preciso persistência real no backend.')
+      return
+    }
     setEditingTransaction(null)
     setForm(emptyInput)
     setTransactionType('EXPENSE')
@@ -357,6 +391,11 @@ function App() {
   function selectAccount(accountId: string) {
     const nextAccount = accountContexts.find((account) => account.id === accountId)
     if (!nextAccount || nextAccount.disabled) return
+    if (nextAccount.id === 'create-profile') {
+      setProfileForm({ name: '', type: 'business' })
+      setProfileModalOpen(true)
+      return
+    }
 
     setCurrentAccount(nextAccount)
     if (nextAccount.profileId) setActiveProfile(nextAccount.profileId)
@@ -380,6 +419,27 @@ function App() {
         'Use o contexto da empresa para separar caixa, entradas e despesas operacionais sem misturar com a família.',
     }
     setGuidedMessage(messages[kind])
+  }
+
+  function handleCreateProfile(event: React.FormEvent) {
+    event.preventDefault()
+    const name = profileForm.name.trim()
+    if (!name) return
+
+    const newProfile: LocalProfile = {
+      id: `local-${crypto.randomUUID()}`,
+      name,
+      type: profileForm.type,
+    }
+    setLocalProfiles((current) => [...current, newProfile])
+    setCurrentAccount({
+      id: newProfile.id,
+      name: newProfile.name,
+      type: newProfile.type,
+      localOnly: true,
+    })
+    setProfileModalOpen(false)
+    setToast('Perfil criado nesta sessão.')
   }
 
   const normalizedAmount = parseCurrencyInput(form.amount)
@@ -491,15 +551,15 @@ function App() {
           <div>
             <p className="eyebrow">Visão simples do seu dinheiro</p>
             <h1>Dashboard financeiro</h1>
-            <div className="context-pill">Você está em: {currentAccountIcon} {resolvedAccount?.name || 'Família'}</div>
+            <div className="context-pill">Perfil atual: {currentAccountIcon} {resolvedAccount?.name || 'Família'}</div>
           </div>
           <div className="topbar-actions">
             <label className="account-switcher">
-              <span>Contexto</span>
+              <span>Perfil</span>
               <select value={resolvedAccount?.id || currentAccount.id} onChange={(event) => selectAccount(event.target.value)}>
                 {accountContexts.map((account) => (
                   <option key={account.id} value={account.id} disabled={account.disabled}>
-                    {account.type === 'business' ? '🏢 ' : account.type === 'new-business' ? '' : account.type === 'all' ? '📊 ' : '🏠 '}
+                    {account.type === 'business' ? '🏢 ' : account.type === 'create-profile' ? '' : account.type === 'all' ? '📊 ' : '🏠 '}
                     {account.name}
                   </option>
                 ))}
@@ -790,6 +850,53 @@ function App() {
               <button type="submit">
                 <CheckCircle2 size={18} />
                 Salvar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+
+      {profileModalOpen ? (
+        <Modal title="Criar novo perfil" onClose={() => setProfileModalOpen(false)}>
+          <form className="profile-form" onSubmit={handleCreateProfile}>
+            <label>
+              Nome do perfil
+              <input
+                required
+                placeholder="Ex: Empresa de consultoria"
+                value={profileForm.name}
+                onChange={(event) => setProfileForm({ ...profileForm, name: event.target.value })}
+              />
+            </label>
+            <div className="movement-type" role="group" aria-label="Tipo do perfil">
+              <button
+                className={profileForm.type === 'personal' ? 'active income' : 'income'}
+                type="button"
+                onClick={() => setProfileForm({ ...profileForm, type: 'personal' })}
+              >
+                <UserRound size={18} />
+                Pessoal
+              </button>
+              <button
+                className={profileForm.type === 'business' ? 'active income' : 'income'}
+                type="button"
+                onClick={() => setProfileForm({ ...profileForm, type: 'business' })}
+              >
+                <Building2 size={18} />
+                Empresa
+              </button>
+            </div>
+            <div className="smart-help warning">
+              <AlertTriangle size={18} />
+              <span>Este perfil é temporário e fica salvo apenas neste navegador. A persistência real exige evolução futura no backend.</span>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-submit" type="button" onClick={() => setProfileModalOpen(false)}>
+                Cancelar
+              </button>
+              <button type="submit">
+                <CheckCircle2 size={18} />
+                Criar perfil
               </button>
             </div>
           </form>

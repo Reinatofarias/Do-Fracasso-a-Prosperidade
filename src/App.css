@@ -967,7 +967,8 @@ nav button:hover,
   border-radius: 8px;
 }
 
-.transaction-form {
+.transaction-form,
+.profile-form {
   display: grid;
   gap: 14px;
 }
