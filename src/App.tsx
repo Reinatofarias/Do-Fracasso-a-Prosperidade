@@ -89,6 +89,53 @@ function maskCurrencyInput(value: string) {
   return currency.format(Number(digits || '0') / 100)
 }
 
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function getTransactionMonthKey(transaction: Transaction) {
+  const date = new Date(`${transaction.dueDate.slice(0, 10)}T00:00:00`)
+  return getMonthKey(date)
+}
+
+function getMonthlyBalance(transactions: Transaction[], monthKey: string) {
+  return transactions
+    .filter((transaction) => getTransactionMonthKey(transaction) === monthKey)
+    .reduce((sum, transaction) => {
+      const amount = Number(transaction.amount)
+      return transaction.type === 'INCOME' ? sum + amount : sum - amount
+    }, 0)
+}
+
+function getMonthlyProgress(transactions: Transaction[]) {
+  const today = new Date()
+  const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const currentMonthKey = getMonthKey(today)
+  const previousMonthKey = getMonthKey(previousMonth)
+  const hasPreviousData = transactions.some((transaction) => getTransactionMonthKey(transaction) === previousMonthKey)
+
+  if (!hasPreviousData) return null
+
+  const currentBalance = getMonthlyBalance(transactions, currentMonthKey)
+  const previousBalance = getMonthlyBalance(transactions, previousMonthKey)
+  const difference = currentBalance - previousBalance
+
+  return {
+    tone: difference >= 0 ? 'positive' : 'negative',
+    amount: Math.abs(difference),
+    message:
+      difference >= 0
+        ? `Você melhorou ${currency.format(Math.abs(difference))} em relação ao mês passado.`
+        : `Você piorou ${currency.format(Math.abs(difference))} em relação ao mês passado.`,
+  }
+}
+
+function getSuggestedAction(status: FinancialStatus['tone']) {
+  if (status === 'positive') return 'Você está indo bem. Continue economizando.'
+  if (status === 'negative') return 'Atenção: reduza gastos para equilibrar seu mês.'
+  return 'Tente manter saldo positivo este mês.'
+}
+
 function buildAccountContexts(profiles: Profile[], accounts: Account[], localProfiles: LocalProfile[]): CurrentAccount[] {
   const personalProfile = profiles.find((profile) => profile.type === 'PERSONAL') || profiles[0]
   const personalAccount = accounts.find((account) => account.profileId === personalProfile?.id)
@@ -233,6 +280,8 @@ function App() {
   const financialPlan = useMemo(() => getFinancialPlan(transactions), [transactions])
   const narrative = useMemo(() => createNarrative(dashboard), [dashboard])
   const financialStatus = useMemo(() => getFinancialStatus(financialPlan, transactions.length), [financialPlan, transactions.length])
+  const monthlyProgress = useMemo(() => getMonthlyProgress(transactions), [transactions])
+  const suggestedAction = useMemo(() => getSuggestedAction(financialStatus.tone), [financialStatus.tone])
   const suggestions = useMemo(
     () => Array.from(new Set(transactions.map((item) => item.description))).slice(0, 8),
     [transactions],
@@ -551,7 +600,7 @@ function App() {
           <div>
             <p className="eyebrow">Visão simples do seu dinheiro</p>
             <h1>Dashboard financeiro</h1>
-            <div className="context-pill">Perfil atual: {currentAccountIcon} {resolvedAccount?.name || 'Família'}</div>
+            <div className="context-pill">Você está em: {currentAccountIcon} {resolvedAccount?.name || 'Família'}</div>
           </div>
           <div className="topbar-actions">
             <label className="account-switcher">
@@ -578,6 +627,7 @@ function App() {
           narrative={narrative}
           status={financialStatus}
           accountType={accountKind}
+          suggestedAction={suggestedAction}
           onAddMovement={openCreateTransaction}
         />
 
@@ -599,7 +649,29 @@ function App() {
           />
           <Metric title="Entradas" value={dashboard.income} icon={<ArrowUpRight size={22} />} tone="green" />
           <Metric title="Saídas" value={dashboard.expense} icon={<ArrowDownLeft size={22} />} tone="red" />
-          <Metric title="Saldo" value={dashboard.balance} icon={<WalletCards size={22} />} tone="gold" />
+          <Metric
+            title="💰 Total guardado"
+            value={dashboard.balance}
+            icon={<WalletCards size={22} />}
+            tone="gold"
+            description={
+              accountKind === 'business'
+                ? `Caixa atual: ${currency.format(dashboard.balance)}`
+                : `Você tem ${currency.format(dashboard.balance)} guardados`
+            }
+          />
+        </section>
+
+        {monthlyProgress ? (
+          <section className={`progress-callout ${monthlyProgress.tone}`}>
+            {monthlyProgress.tone === 'positive' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+            <span>{monthlyProgress.message}</span>
+          </section>
+        ) : null}
+
+        <section className={`suggested-action ${financialStatus.tone}`}>
+          <Target size={18} />
+          <span>{suggestedAction}</span>
         </section>
 
         <section className="insights">
@@ -953,7 +1025,7 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
       tone: 'neutral',
       title: 'Vamos começar simples',
       message: 'Adicione um ganho ou gasto. O sistema organiza o resto pra você.',
-      label: 'Sem movimentos',
+      label: 'Situação: ATENÇÃO',
     }
   }
 
@@ -962,7 +1034,7 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
       tone: 'negative',
       title: 'Atenção: você está gastando mais do que ganha',
       message: `Faltam ${currency.format(Math.abs(plan.saldo))} para fechar o mês no positivo.`,
-      label: 'Negativo',
+      label: 'Situação: NEGATIVA',
     }
   }
 
@@ -971,7 +1043,7 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
       tone: 'warning',
       title: 'Mês no limite',
       message: 'Entradas e saídas estão empatadas. Qualquer novo gasto deixa o mês negativo.',
-      label: 'Alerta',
+      label: 'Situação: ATENÇÃO',
     }
   }
 
@@ -979,7 +1051,7 @@ function getFinancialStatus(plan: FinancialPlan, transactionCount: number): Fina
     tone: 'positive',
     title: 'Você está no caminho certo',
     message: `Você ganhou ${currency.format(plan.totalEntradas)}, gastou ${currency.format(plan.totalSaidas)} e sobrou ${currency.format(plan.saldo)}.`,
-    label: 'Positivo',
+    label: 'Situação: POSITIVA',
   }
 }
 
@@ -988,12 +1060,14 @@ function FinancialStatusHero({
   narrative,
   status,
   accountType,
+  suggestedAction,
   onAddMovement,
 }: {
   dashboard: Dashboard
   narrative: string
   status: FinancialStatus
   accountType: 'personal' | 'business'
+  suggestedAction: string
   onAddMovement: () => void
 }) {
   const emotionalMessage =
@@ -1015,8 +1089,13 @@ function FinancialStatusHero({
           {status.label}
         </div>
         <h2>{status.title}</h2>
-        <p>{status.message}</p>
+        <div className="hero-breakdown">
+          <span>Você ganhou <strong>{currency.format(dashboard.income)}</strong></span>
+          <span>Gastou <strong>{currency.format(dashboard.expense)}</strong></span>
+          <span>Sobrou <strong>{currency.format(dashboard.result)}</strong></span>
+        </div>
         <p className="emotional-feedback">{emotionalMessage}</p>
+        <p className="hero-next-step">👉 {suggestedAction}</p>
         <span className="status-narrative">{narrative}</span>
       </div>
       <div className="hero-money">
@@ -1052,12 +1131,14 @@ function Metric({
   value,
   icon,
   tone,
+  description,
   featured = false,
 }: {
   title: string
   value: number
   icon: React.ReactNode
   tone: 'gold' | 'green' | 'red'
+  description?: string
   featured?: boolean
 }) {
   return (
@@ -1065,6 +1146,7 @@ function Metric({
       <span>{icon}</span>
       <p>{title}</p>
       <strong>{currency.format(value)}</strong>
+      {description ? <small>{description}</small> : null}
     </article>
   )
 }

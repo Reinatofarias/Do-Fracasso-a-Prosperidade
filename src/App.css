@@ -488,6 +488,33 @@ nav button:hover,
   font-weight: 850;
 }
 
+.hero-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hero-breakdown span,
+.hero-next-step {
+  width: max-content;
+  max-width: 100%;
+  padding: 9px 11px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.hero-breakdown strong {
+  color: #ffffff;
+}
+
+.hero-next-step {
+  border-radius: 8px;
+}
+
 .warning p,
 .neutral p {
   color: rgba(242, 247, 244, 0.72);
@@ -615,9 +642,51 @@ nav button:hover,
   animation: value-pop 320ms ease both;
 }
 
+.metric small {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .metric.featured strong {
   font-size: clamp(2.55rem, 5vw, 4.7rem);
   line-height: 0.96;
+}
+
+.progress-callout,
+.suggested-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  line-height: 1.45;
+  font-weight: 850;
+}
+
+.progress-callout.positive,
+.suggested-action.positive {
+  color: var(--brand-strong);
+  background: var(--green-soft);
+  border-color: rgba(40, 199, 111, 0.28);
+}
+
+.progress-callout.negative,
+.suggested-action.negative {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: rgba(255, 92, 92, 0.28);
+}
+
+.suggested-action.warning,
+.suggested-action.neutral {
+  color: var(--gold);
+  background: var(--gold-soft);
+  border-color: rgba(243, 201, 95, 0.28);
 }
 
 .insights {
