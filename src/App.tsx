@@ -606,22 +606,6 @@ function App() {
             <Landmark size={18} />
             Movimentos
           </button>
-          <button
-            className={activeNavigation === 'reports' ? 'active' : ''}
-            onClick={() => navigateSidebar('reports')}
-            type="button"
-          >
-            <CircleDollarSign size={18} />
-            Relatórios
-          </button>
-          <button
-            className={activeNavigation === 'settings' ? 'active' : ''}
-            onClick={() => navigateSidebar('settings')}
-            type="button"
-          >
-            <WalletCards size={18} />
-            Configurações
-          </button>
         </nav>
 
         <div className="verse">
