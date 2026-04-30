@@ -24,7 +24,6 @@ import {
   Landmark,
   LogOut,
   Plus,
-  ShieldCheck,
   Sparkles,
   Target,
   Trash2,
@@ -206,7 +205,7 @@ function App() {
     const saved = localStorage.getItem('prosperidade.session')
     return saved ? JSON.parse(saved) : null
   })
-  const [login, setLogin] = useState({ email: 'voce@prosperidade.local', password: 'prosperidade123' })
+  const [login, setLogin] = useState({ email: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [demoMode, setDemoMode] = useState(false)
   const [activeProfile, setActiveProfile] = useState('personal-default')
@@ -511,10 +510,10 @@ function App() {
       <main className="login-shell">
         <section className="login-hero">
           <div className="brand-mark">
-            <Sparkles size={28} />
+            <WalletCards size={28} />
           </div>
-          <p className="eyebrow">Sistema financeiro familiar e empresarial</p>
-          <h1>Do Fracasso a Prosperidade</h1>
+          <p className="eyebrow">Gestão financeira familiar e empresarial</p>
+          <h1>Financeiro Farias</h1>
           <h2>Validando sessão...</h2>
         </section>
       </main>
@@ -526,11 +525,11 @@ function App() {
       <main className="login-shell">
         <section className="login-hero">
           <div className="brand-mark">
-            <Sparkles size={28} />
+            <WalletCards size={28} />
           </div>
-          <p className="eyebrow">Sistema financeiro familiar e empresarial</p>
-          <h1>Do Fracasso a Prosperidade</h1>
-          <h2>Vivendo ao invés de sobreviver</h2>
+          <p className="eyebrow">Gestão financeira familiar e empresarial</p>
+          <h1>Financeiro Farias</h1>
+          <h2>Clareza para família e empresas</h2>
           <blockquote>
             Vocês conhecem o amor de nosso Senhor Jesus Cristo que, sendo rico, tornou-se pobre por amor de vocês, a fim
             de que pela sua pobreza pudessem enriquecer.
@@ -538,18 +537,26 @@ function App() {
           </blockquote>
         </section>
 
-        <form className="login-panel" onSubmit={handleLogin}>
-          <ShieldCheck className="panel-icon" size={28} />
+        <form className="login-panel" onSubmit={handleLogin} autoComplete="off">
+          <WalletCards className="panel-icon" size={28} />
           <h3>Acesso restrito</h3>
           <p>Entre para cuidar dos ganhos e gastos sem precisar conhecer termos financeiros.</p>
           <label>
             Email
-            <input value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
+            <input
+              autoComplete="off"
+              inputMode="email"
+              placeholder="seu@email.com"
+              value={login.email}
+              onChange={(event) => setLogin({ ...login, email: event.target.value })}
+            />
           </label>
           <label>
             Senha
             <input
+              autoComplete="new-password"
               type="password"
+              placeholder="Sua senha"
               value={login.password}
               onChange={(event) => setLogin({ ...login, password: event.target.value })}
             />
@@ -569,11 +576,11 @@ function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">
-            <Sparkles size={22} />
+            <WalletCards size={22} />
           </div>
           <div>
-            <strong>Prosperidade</strong>
-            <span>Do Fracasso a Prosperidade</span>
+            <strong>Financeiro Farias</strong>
+            <span>Família e empresas</span>
           </div>
         </div>
 
@@ -607,7 +614,7 @@ function App() {
             onClick={() => navigateSidebar('settings')}
             type="button"
           >
-            <ShieldCheck size={18} />
+            <WalletCards size={18} />
             Configurações
           </button>
         </nav>
@@ -850,7 +857,7 @@ function App() {
               <span>Preferências</span>
               <h3>Configurações</h3>
             </div>
-            <ShieldCheck size={20} />
+            <WalletCards size={20} />
           </div>
           <p>
             O contexto financeiro é escolhido no seletor de perfil no topo. Configurações persistentes de novos perfis
